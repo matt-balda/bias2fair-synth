@@ -69,9 +69,9 @@ def plot_metric_boxplots(df, base):
             continue
         fig, ax = plt.subplots(figsize=(12, 5))
         order = [g for g in GENERATOR_ORDER if g in df['generator'].unique()]
-        sns.violinplot(data=df, x='scenario', y=metric, hue='generator',
-                       order=SCENARIO_ORDER, hue_order=order,
-                       palette=PALETTE, inner='quart', ax=ax)
+        sns.boxplot(data=df, x='scenario', y=metric, hue='generator',
+                    order=SCENARIO_ORDER, hue_order=order,
+                    palette=PALETTE, ax=ax)
         if metric == 'disparate_impact':
             ax.axhline(0.8, color='red', linestyle='--', lw=1, label='80% Rule')
         ax.set_title(f'{metric.replace("_", " ").title()} — Distribution across Seeds')
