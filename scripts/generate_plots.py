@@ -62,59 +62,76 @@ def save(fig, *parts, tight=True):
 # 1.  METRICS PLOTS
 # ══════════════════════════════════════════════════════════════════════════════
 def plot_metric_boxplots(df, base):
-    """Violin + box per metric, one PNG per metric."""
+    """Categorical Boxplots per metric, split by predictive Model into columns."""
     out = makedirs(base, 'metrics', 'boxplots')
     for metric in tqdm(ALL_METRICS, desc='  Boxplots/Violin', leave=False):
         if metric not in df.columns:
             continue
-        fig, ax = plt.subplots(figsize=(12, 5))
+            
         order = [g for g in GENERATOR_ORDER if g in df['generator'].unique()]
-        sns.boxplot(data=df, x='scenario', y=metric, hue='generator',
-                    order=SCENARIO_ORDER, hue_order=order,
-                    palette=PALETTE, ax=ax)
+        g = sns.catplot(
+            data=df, x='scenario', y=metric, hue='generator', col='model',
+            kind='box', order=SCENARIO_ORDER, hue_order=order,
+            palette=PALETTE, height=5, aspect=1.1, sharey=True,
+            legend_out=True
+        )
+        
         if metric == 'disparate_impact':
-            ax.axhline(0.8, color='red', linestyle='--', lw=1, label='80% Rule')
-        ax.set_title(f'{metric.replace("_", " ").title()} — Distribution across Seeds')
-        ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=8)
-        save(fig, out, f'{metric}.png')
+            for ax in g.axes.flatten():
+                ax.axhline(0.8, color='red', linestyle='--', lw=1.5, zorder=0)
+                
+        g.fig.subplots_adjust(top=0.88)
+        g.fig.suptitle(f'{metric.replace("_", " ").title()} — Distribution across Seeds', fontsize=16)
+        save(g.fig, out, f'{metric}.png')
 
 
 def plot_grouped_bars(df, base):
-    """Grouped bar (mean ± std) per metric."""
+    """Grouped bar (mean ± std) per metric, split by predictive Model into columns."""
     out = makedirs(base, 'metrics', 'grouped_bars')
-    summary = df.groupby(['scenario', 'generator'])[ALL_METRICS].agg(['mean', 'std'])
     for metric in tqdm(ALL_METRICS, desc='  Grouped bars', leave=False):
         if metric not in df.columns:
             continue
-        means = summary[metric]['mean'].unstack('generator')
-        stds  = summary[metric]['std'].unstack('generator')
-        fig, ax = plt.subplots(figsize=(12, 5))
-        means.loc[[s for s in SCENARIO_ORDER if s in means.index]].plot(
-            kind='bar', yerr=stds, ax=ax, colormap=PALETTE, capsize=3, rot=0
+            
+        order = [g for g in GENERATOR_ORDER if g in df['generator'].unique()]
+        g = sns.catplot(
+            data=df, x='scenario', y=metric, hue='generator', col='model',
+            kind='bar', errorbar='sd', order=SCENARIO_ORDER, hue_order=order,
+            palette=PALETTE, height=5, aspect=1.1, sharey=True, capsize=.1,
+            legend_out=True
         )
+        
         if metric == 'disparate_impact':
-            ax.axhline(0.8, color='red', linestyle='--', lw=1)
-        ax.set_title(f'{metric.replace("_", " ").title()} (Mean ± Std)')
-        ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=8)
-        save(fig, out, f'{metric}.png')
+            for ax in g.axes.flatten():
+                ax.axhline(0.8, color='red', linestyle='--', lw=1.5, zorder=0)
+
+        g.fig.subplots_adjust(top=0.88)
+        g.fig.suptitle(f'{metric.replace("_", " ").title()} (Mean ± Std)', fontsize=16)
+        save(g.fig, out, f'{metric}.png')
 
 
 def plot_tradeoff(df, base):
-    """Fairness vs Performance Pareto plot."""
+    """Fairness vs Performance Pareto plot via relplot."""
     out = makedirs(base, 'metrics')
     means = (df.groupby(['scenario', 'generator', 'model'])
                [['f1', 'disparate_impact']].mean().reset_index())
-    fig, ax = plt.subplots(figsize=(10, 7))
-    sns.scatterplot(data=means, x='disparate_impact', y='f1',
-                    hue='scenario', style='generator',
-                    s=90, alpha=0.85, palette='viridis', ax=ax)
-    ax.axvline(0.8, color='red', linestyle='--', alpha=0.5, label='80% Rule')
-    ax.set_title('Fairness–Utility Trade-off (Pareto View)')
-    ax.set_xlabel('Fairness — Disparate Impact (↑ better)')
-    ax.set_ylabel('Utility — F1-Score (↑ better)')
-    ax.grid(True, alpha=0.3)
-    ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', fontsize=8)
-    save(fig, out, 'pareto_frontier.png')
+               
+    g = sns.relplot(
+        data=means, x='disparate_impact', y='f1', col='model',
+        hue='scenario', style='generator', s=150, alpha=0.85, 
+        palette='viridis', height=5, aspect=1.1, kind='scatter'
+    )
+    
+    for ax in g.axes.flatten():
+        ax.axvline(0.8, color='red', linestyle='--', alpha=0.5, label='80% Rule (Bias limit)')
+        ax.axvline(1.25, color='red', linestyle='--', alpha=0.5) # Upper bound
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel('Fairness (Disparate Impact)')
+        ax.set_ylabel('Utility (F1-Score)')
+        
+    g.fig.subplots_adjust(top=0.85)
+    g.fig.suptitle('Fairness–Utility Trade-off (Pareto View)', fontsize=16)
+    
+    save(g.fig, out, 'pareto_frontier.png')
 
 
 def plot_wilcoxon_heatmap(df, base):
