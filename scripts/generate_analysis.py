@@ -87,20 +87,6 @@ def generate_robust_visualizations(csv_path='outputs/compas_results.csv', output
     
     print("Generating Robust Visualizations...")
     
-    # 1. Violin Plots (Stability)
-    plt.figure(figsize=(14, 7))
-    sns.violinplot(data=df, x='scenario', y='f1', hue='generator', split=False, inner="quart")
-    plt.title('Performance Stability (F1-Score) across Scenarios and Generators')
-    plt.savefig(os.path.join(plot_dir, 'violin_f1_stability.png'))
-    plt.close()
-    
-    plt.figure(figsize=(14, 7))
-    sns.violinplot(data=df, x='scenario', y='disparate_impact', hue='generator', split=False, inner="quart")
-    plt.axhline(y=0.8, color='r', linestyle='--', label='80% Rule')
-    plt.title('Fairness Stability (Disparate Impact) across Scenarios and Generators')
-    plt.savefig(os.path.join(plot_dir, 'violin_di_stability.png'))
-    plt.close()
-
     # 2. Radar Comparison
     plot_radar(df, plot_dir)
 
@@ -123,7 +109,7 @@ def generate_robust_visualizations(csv_path='outputs/compas_results.csv', output
 
     # 4. Statistical Summary
     models = df['model'].unique()
-    scenarios_to_compare = [('S1', 'S2'), ('S1', 'S3'), ('S1', 'S4'), ('S1', 'S6'), ('S2', 'S6')]
+    scenarios_to_compare = [('S1', 'S2'), ('S1', 'S3'), ('S1', 'S4'), ('S1', 'S5'), ('S2', 'S5')]
     stats_df = check_stat_tests(df, scenarios_to_compare, models)
     stats_df.to_csv(os.path.join(output_dir, 'statistical_significance.csv'), index=False)
     
