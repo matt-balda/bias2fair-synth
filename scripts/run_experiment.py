@@ -8,6 +8,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
 from aif360.sklearn.preprocessing import Reweighing
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer, TVAESynthesizer
@@ -106,20 +107,25 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
         metadata.detect_from_dataframe(train)
 
         gen = build_generator(generator_name, metadata)
-        gen.fit(train)
 
         if scenario == 'S3':  # Full Augmentation
+            gen.fit(train)
             synth = gen.sample(len(train))
             train_final = pd.concat([train, synth], ignore_index=True)
 
         elif scenario == 'S4':  # Minority Group Only (race == 0 = African-American)
             minority = train[train[SENSITIVE] == 0]
+            gen.fit(minority) # Fit ONLY on minority for proper contextual conditionals
             synth = gen.sample(len(minority))
             train_final = pd.concat([train, synth], ignore_index=True)
 
         elif scenario == 'S5':  # Combined — synth from already-reweighed train
+            # Sample with replacement based on weights to create empirical fair distribution for gen to learn
+            train_balanced = train.sample(n=len(train), replace=True, weights=weights, random_state=seed)
+            gen.fit(train_balanced)
             synth = gen.sample(len(train))
             train_final = pd.concat([train, synth], ignore_index=True)
+            
             # Recompute weights on expanded set
             X_rw2 = train_final.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
             y_rw2 = train_final[TARGET]
@@ -142,6 +148,16 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
     X_test  = test.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
     y_test  = test[TARGET]
     s_test  = test[SENSITIVE]
+    
+    # Standard scale features
+    num_cols = X_train.select_dtypes(include=['int64', 'int32', 'float64', 'float32', 'uint8']).columns
+    scaler = StandardScaler()
+    X_train_scaled = X_train.copy()
+    X_test_scaled = X_test.copy()
+    
+    if len(num_cols) > 0:
+        X_train_scaled[num_cols] = scaler.fit_transform(X_train[num_cols])
+        X_test_scaled[num_cols] = scaler.transform(X_test[num_cols])
 
     results = []
     models  = get_models(seed)
@@ -153,12 +169,12 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             if weights is not None:
-                model.fit(X_train, y_train, sample_weight=weights)
+                model.fit(X_train_scaled, y_train, sample_weight=weights)
             else:
-                model.fit(X_train, y_train)
+                model.fit(X_train_scaled, y_train)
 
-        y_pred = model.predict(X_test)
-        y_prob = model.predict_proba(X_test)[:, 1]
+        y_pred = model.predict(X_test_scaled)
+        y_prob = model.predict_proba(X_test_scaled)[:, 1]
 
         metrics = calculate_metrics(y_test, y_pred, y_prob, s_test)
         metrics.update({

@@ -25,16 +25,34 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features):
     metrics['precision'] = precision_score(y_true, y_pred)
     metrics['accuracy'] = accuracy_score(y_true, y_pred)
     
-    # Fairness
-    metrics['statistical_parity_difference'] = demographic_parity_difference(
-        y_true, y_pred, sensitive_features=sensitive_features
-    )
-    metrics['disparate_impact'] = demographic_parity_ratio(
-        y_true, y_pred, sensitive_features=sensitive_features
-    )
-    metrics['equal_opportunity_difference'] = equal_opportunity_difference(
-        y_true, y_pred, sensitive_features=sensitive_features
-    )
+    # Fairness (Signed metrics: Unprivileged - Privileged)
+    # 0 = Unprivileged (African-American), 1 = Privileged (Caucasian)
+    if isinstance(sensitive_features, pd.Series):
+        sensitive_array = sensitive_features.values
+    else:
+        sensitive_array = np.array(sensitive_features)
+        
+    priv_mask = (sensitive_array == 1)
+    unpriv_mask = (sensitive_array == 0)
+    
+    y_pred_array = np.array(y_pred)
+    y_true_array = np.array(y_true)
+    
+    pr_priv = y_pred_array[priv_mask].mean() if priv_mask.sum() > 0 else 0.0
+    pr_unpriv = y_pred_array[unpriv_mask].mean() if unpriv_mask.sum() > 0 else 0.0
+    
+    metrics['statistical_parity_difference'] = pr_unpriv - pr_priv
+    metrics['disparate_impact'] = pr_unpriv / pr_priv if pr_priv > 0 else np.nan
+    
+    # TPR for Equal Opportunity on target class 1
+    y1_priv_mask = priv_mask & (y_true_array == 1)
+    y1_unpriv_mask = unpriv_mask & (y_true_array == 1)
+    
+    tpr_priv = y_pred_array[y1_priv_mask].mean() if y1_priv_mask.sum() > 0 else 0.0
+    tpr_unpriv = y_pred_array[y1_unpriv_mask].mean() if y1_unpriv_mask.sum() > 0 else 0.0
+    
+    metrics['equal_opportunity_difference'] = tpr_unpriv - tpr_priv
+    
     metrics['average_absolute_odds_difference'] = equalized_odds_difference(
         y_true, y_pred, sensitive_features=sensitive_features
     )
