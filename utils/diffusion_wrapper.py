@@ -23,13 +23,23 @@ class TabDDPMWrapper:
         self.cat_cols = []
         self.original_columns = []
         
+        # Tracking ranges and types for numerical bounds clipping
+        self.num_bounds = {}
+        self.num_is_int = {}
+        
     def _preprocess(self, df):
         # Identify numerical and categorical based on metadata or types
         # For COMPAS, we know the types
-        self.cat_cols = [col for col in df.columns if df[col].dtype == 'object' or col in ['sex', 'race', 'age_cat', 'c_charge_degree', 'two_year_recid']]
+        self.cat_cols = [col for col in df.columns if df[col].dtype == 'object' or col in ['sex', 'race', 'c_charge_degree', 'two_year_recid'] or str(col).startswith('age_cat_')]
         self.num_cols = [col for col in df.columns if col not in self.cat_cols]
         
+        # Track limits
+        for col in self.num_cols:
+            self.num_bounds[col] = (df[col].min(), df[col].max())
+            self.num_is_int[col] = pd.api.types.is_integer_dtype(df[col])
+
         X_num = self.num_scaler.fit_transform(df[self.num_cols].values) if self.num_cols else np.empty((len(df), 0))
+
         X_cat = df[self.cat_cols].values if self.cat_cols else np.empty((len(df), 0))
         
         # Categorical to Label (for multinomial diffusion)
@@ -77,7 +87,11 @@ class TabDDPMWrapper:
         
         # Training loop
         self.model.train()
-        epochs = 100
+        
+        # Ensure sufficient training steps (at least 5000 steps roughly)
+        steps_per_epoch = max(1, X_num.shape[0] // self.batch_size)
+        epochs = max(200, 5000 // steps_per_epoch)
+        
         for epoch in range(epochs):
             idx = torch.randperm(X_num.shape[0])
             for i in range(0, X_num.shape[0], self.batch_size):
@@ -144,6 +158,14 @@ class TabDDPMWrapper:
             
             # Build DataFrame
             df_num = pd.DataFrame(res_num, columns=self.num_cols)
+            
+            # Post-process numerical bounds and types
+            for col in self.num_cols:
+                min_val, max_val = self.num_bounds[col]
+                df_num[col] = df_num[col].clip(lower=min_val, upper=max_val)
+                if self.num_is_int[col]:
+                    df_num[col] = df_num[col].round().astype(int)
+
             df_cat = pd.DataFrame(np.stack(res_cat_labels, axis=1), columns=self.cat_cols)
             df_final = pd.concat([df_num, df_cat], axis=1)
             return df_final[self.original_columns]
