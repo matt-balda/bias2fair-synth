@@ -33,7 +33,7 @@ def load_compas(path="data/compas-scores-two-years.csv"):
     df['c_charge_degree'] = df['c_charge_degree'].map({'F': 1, 'M': 0})
     
     # One-hot encoding for categorical cat categories if needed, but COMPAS is simple
-    df = pd.get_dummies(df, columns=['age_cat'], drop_first=True)
+    df = pd.get_dummies(df, columns=['age_cat'], drop_first=True, dtype=int)
     
     return df.dropna()
 

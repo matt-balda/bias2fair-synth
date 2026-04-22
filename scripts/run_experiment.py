@@ -10,7 +10,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
-from aif360.sklearn.preprocessing import Reweighing
+from aif360.sklearn.preprocessing import Reweighing, LearnedFairRepresentations
+from aif360.algorithms.preprocessing import DisparateImpactRemover
+from aif360.datasets import BinaryLabelDataset
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer, TVAESynthesizer
 from sdv.metadata import SingleTableMetadata
 from tqdm import tqdm
@@ -31,6 +33,7 @@ SENSITIVE = 'race'
 DATASET   = 'compas'
 
 SCENARIOS = ['S1', 'S2', 'S3', 'S4', 'S5']
+MITIGATORS = ['Reweighing', 'DIRemover', 'LFR']
 
 # S1/S2 don't iterate over generators
 GENERATORS_FOR = {
@@ -82,7 +85,7 @@ def save_synthetic(synth_df, scenario, generator, seed, metadata_info):
     synth_df.to_csv(filepath, index=False)
 
 
-def run_single(scenario, generator_name, seed, data, pbar=None):
+def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
     set_seed(seed)
 
     # ── Step 1: Stratified split ───────────────────────────────────────────
@@ -92,14 +95,38 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
     )
 
     weights = None
+    dir_remover = None
+    lfr_model = None
 
-    # ── Step 2: Reweighing (only S2 and S5) ───────────────────────────────
+    # ── Step 2: Bias Mitigation (only S2 and S5) ───────────────────────────────
     if scenario in ['S2', 'S5']:
-        X_rw = train.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
-        y_rw = train[TARGET]
-        rw = Reweighing(prot_attr=SENSITIVE)
-        _, w = rw.fit_transform(X_rw, y_rw)
-        weights = w.values if hasattr(w, 'values') else np.asarray(w)
+        if mitigator_name == 'Reweighing':
+            X_rw = train.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
+            y_rw = train[TARGET]
+            rw = Reweighing(prot_attr=SENSITIVE)
+            _, w = rw.fit_transform(X_rw, y_rw)
+            weights = w.values if hasattr(w, 'values') else np.asarray(w)
+            
+        elif mitigator_name == 'DIRemover':
+            bld_train = BinaryLabelDataset(df=train, label_names=[TARGET], protected_attribute_names=[SENSITIVE])
+            dir_remover = DisparateImpactRemover(repair_level=1.0)
+            train_repaired = dir_remover.fit_transform(bld_train)
+            train_repaired_df, _ = train_repaired.convert_to_dataframe()
+            for col in train.columns:
+                if col in train_repaired_df.columns:
+                    train[col] = train_repaired_df[col].values
+                    
+        elif mitigator_name == 'LFR':
+            X_lfr_in = train.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
+            y_lfr_in = train[TARGET]
+            lfr_model = LearnedFairRepresentations(prot_attr=SENSITIVE)
+            X_lfr_out = lfr_model.fit_transform(X_lfr_in, y_lfr_in)
+            
+            # Reconstruct train
+            train_lfr = X_lfr_out.copy()
+            train_lfr[TARGET] = y_lfr_in.values
+            train_lfr = train_lfr.reset_index(drop=True)
+            train = train_lfr
 
     # ── Step 3: Synthetic data (S3, S4, S5) ───────────────────────────────
     if scenario in ['S3', 'S4', 'S5']:
@@ -119,19 +146,23 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
             synth = gen.sample(len(minority))
             train_final = pd.concat([train, synth], ignore_index=True)
 
-        elif scenario == 'S5':  # Combined — synth from already-reweighed train
-            # Sample with replacement based on weights to create empirical fair distribution for gen to learn
-            train_balanced = train.sample(n=len(train), replace=True, weights=weights, random_state=seed)
-            gen.fit(train_balanced)
+        elif scenario == 'S5':  # Combined — synth from already-mitigated train
+            if weights is not None:
+                train_for_gen = train.sample(n=len(train), replace=True, weights=weights, random_state=seed)
+            else:
+                train_for_gen = train
+                
+            gen.fit(train_for_gen)
             synth = gen.sample(len(train))
             train_final = pd.concat([train, synth], ignore_index=True)
             
-            # Recompute weights on expanded set
-            X_rw2 = train_final.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
-            y_rw2 = train_final[TARGET]
-            rw2 = Reweighing(prot_attr=SENSITIVE)
-            _, w2 = rw2.fit_transform(X_rw2, y_rw2)
-            weights = w2.values if hasattr(w2, 'values') else np.asarray(w2)
+            # Recompute weights on expanded set if Reweighing was used
+            if weights is not None:
+                X_rw2 = train_final.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
+                y_rw2 = train_final[TARGET]
+                rw2 = Reweighing(prot_attr=SENSITIVE)
+                _, w2 = rw2.fit_transform(X_rw2, y_rw2)
+                weights = w2.values if hasattr(w2, 'values') else np.asarray(w2)
 
         # Save synthetic data
         save_synthetic(synth, scenario, generator_name, seed,
@@ -143,6 +174,24 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
         train_final = train
 
     # ── Step 4 & 5: Train and Evaluate ────────────────────────────────────
+    # Apply mitigator on test set if necessary
+    if scenario in ['S2', 'S5']:
+        if mitigator_name == 'DIRemover':
+            bld_test = BinaryLabelDataset(df=test, label_names=[TARGET], protected_attribute_names=[SENSITIVE])
+            test_repaired = dir_remover.fit_transform(bld_test)
+            test_repaired_df, _ = test_repaired.convert_to_dataframe()
+            for col in test.columns:
+                if col in test_repaired_df.columns:
+                    test[col] = test_repaired_df[col].values
+                    
+        elif mitigator_name == 'LFR':
+            X_test_lfr_in = test.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
+            X_test_lfr_out = lfr_model.transform(X_test_lfr_in)
+            test_lfr = X_test_lfr_out.copy()
+            test_lfr[TARGET] = test[TARGET].values
+            test_lfr = test_lfr.reset_index(drop=True)
+            test = test_lfr
+
     X_train = train_final.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
     y_train = train_final[TARGET]
     X_test  = test.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
@@ -176,11 +225,12 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
         y_pred = model.predict(X_test_scaled)
         y_prob = model.predict_proba(X_test_scaled)[:, 1]
 
-        save_path = os.path.join('outputs', 'predictions', f"{DATASET}_{scenario}_{generator_name}_{model_name}_seed{seed}.csv")
+        save_path = os.path.join('outputs', 'predictions', f"{DATASET}_{scenario}_{mitigator_name}_{generator_name}_{model_name}_seed{seed}.csv")
         metrics = calculate_metrics(y_test, y_pred, y_prob, s_test, save_path=save_path)
         metrics.update({
             'dataset':   DATASET,
             'scenario':  scenario,
+            'mitigator': mitigator_name,
             'generator': generator_name,
             'model':     model_name,
             'seed':      seed,
@@ -215,14 +265,17 @@ def main():
     if os.path.exists(csv_path):
         df_old = pd.read_csv(csv_path)
         for _, row in df_old.iterrows():
-            processed.add((row['scenario'], row['generator'], int(row['seed'])))
+            mit = row.get('mitigator', 'None')
+            processed.add((row['scenario'], mit, row['generator'], int(row['seed'])))
         all_results = df_old.to_dict('records')
 
     # ── Count total tasks ──────────────────────────────────────────────────
-    total_tasks = sum(
-        len(GENERATORS_FOR[sc]) * len(seeds)
-        for sc in SCENARIOS
-    )
+    total_tasks = 0
+    for sc in SCENARIOS:
+        gens = len(GENERATORS_FOR[sc])
+        mits = len(MITIGATORS) if sc in ['S2', 'S5'] else 1
+        total_tasks += gens * mits * len(seeds)
+        
     done_tasks = len(processed)
 
     print(f'  → Resuming: {done_tasks}/{total_tasks} tasks already done.\n')
@@ -233,31 +286,33 @@ def main():
 
         for scenario in SCENARIOS:
             generators = GENERATORS_FOR[scenario]
+            mits = MITIGATORS if scenario in ['S2', 'S5'] else ['None']
             pbar.set_description(f'{SCENARIO_LABELS[scenario][:42]}')
 
-            for gen in generators:
-                for seed in seeds:
-                    if (scenario, gen, seed) in processed:
-                        pbar.update(0)  # Already counted in initial
-                        continue
+            for mitigator in mits:
+                for gen in generators:
+                    for seed in seeds:
+                        if (scenario, mitigator, gen, seed) in processed:
+                            pbar.update(0)  # Already counted in initial
+                            continue
 
-                    pbar.set_postfix_str(f'gen={gen}  seed={seed}', refresh=True)
+                        pbar.set_postfix_str(f'mit={mitigator[:3]} gen={gen} seed={seed}', refresh=True)
 
-                    try:
-                        res = run_single(scenario, gen, seed, data, pbar=pbar)
-                        all_results.extend(res)
-                        processed.add((scenario, gen, seed))
+                        try:
+                            res = run_single(scenario, gen, mitigator, seed, data, pbar=pbar)
+                            all_results.extend(res)
+                            processed.add((scenario, mitigator, gen, seed))
 
-                        # Incremental save
-                        pd.DataFrame(all_results).to_csv(csv_path, index=False)
-                    except Exception as e:
-                        tqdm.write(f'  ⚠ Error [{scenario}/{gen}/seed={seed}]: {e}')
+                            # Incremental save
+                            pd.DataFrame(all_results).to_csv(csv_path, index=False)
+                        except Exception as e:
+                            tqdm.write(f'  ⚠ Error [{scenario}/{mitigator}/{gen}/seed={seed}]: {e}')
 
-                    pbar.update(1)
+                        pbar.update(1)
 
     # ── Summary ────────────────────────────────────────────────────────────
     df = pd.DataFrame(all_results)
-    summary = df.groupby(['scenario', 'generator', 'model']).agg({
+    summary = df.groupby(['scenario', 'mitigator', 'generator', 'model']).agg({
         'f1':                          ['mean', 'std'],
         'auc_roc':                     ['mean', 'std'],
         'disparate_impact':            ['mean', 'std'],
