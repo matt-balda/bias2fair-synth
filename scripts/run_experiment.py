@@ -8,6 +8,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
 from aif360.sklearn.preprocessing import Reweighing, LearnedFairRepresentations
@@ -32,24 +33,30 @@ TARGET    = 'two_year_recid'
 SENSITIVE = 'race'
 DATASET   = 'compas'
 
-SCENARIOS = ['S1', 'S2', 'S3', 'S4', 'S5']
+SCENARIOS = ['S1', 'S2', 'S3_1.5', 'S3_2.0', 'S3_3.0', 'S4', 'S5', 'S6']
 MITIGATORS = ['Reweighing', 'DIRemover', 'LFR']
 
 # S1/S2 don't iterate over generators
 GENERATORS_FOR = {
     'S1': ['Baseline'],
     'S2': ['Baseline'],
-    'S3': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
+    'S3_1.5': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
+    'S3_2.0': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
+    'S3_3.0': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
     'S4': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
     'S5': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
+    'S6': ['GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM'],
 }
 
 SCENARIO_LABELS = {
     'S1': 'S1 — Baseline (No Intervention)',
-    'S2': 'S2 — Bias Mitigation Only (Reweighing)',
-    'S3': 'S3 — Full Augmentation (Real + Synthetic)',
-    'S4': 'S4 — Minority Oversampling (Synthetic for Race==0)',
-    'S5': 'S5 — Combined (Bias Mitigation + Synthetic)',
+    'S2': 'S2 — Bias Mitigation Only',
+    'S3_1.5': 'S3_1.5 — Full Augmentation (alpha=1.5)',
+    'S3_2.0': 'S3_2.0 — Full Augmentation (alpha=2.0)',
+    'S3_3.0': 'S3_3.0 — Full Augmentation (alpha=3.0)',
+    'S4': 'S4 — Minority Oversampling (Sensitive x Target)',
+    'S5': 'S5 — Conditional Generation by Outcome',
+    'S6': 'S6 — Hybrid (Mitigation + Conditional Gen)',
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,7 +64,7 @@ SCENARIO_LABELS = {
 def get_models(seed):
     return {
         'LogisticRegression': LogisticRegression(random_state=seed, max_iter=1000),
-        'RandomForest':       RandomForestClassifier(random_state=seed, max_depth=7),
+        'SVM':                SVC(random_state=seed, probability=True),
         'CatBoost':           CatBoostClassifier(random_state=seed, verbose=0,
                                                  iterations=500, task_type='GPU',
                                                  allow_writing_files=False),
@@ -98,8 +105,8 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
     dir_remover = None
     lfr_model = None
 
-    # ── Step 2: Bias Mitigation (only S2 and S5) ───────────────────────────────
-    if scenario in ['S2', 'S5']:
+    # ── Step 2: Bias Mitigation (only S2 and S6) ───────────────────────────────
+    if scenario in ['S2', 'S6']:
         if mitigator_name == 'Reweighing':
             X_rw = train.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
             y_rw = train[TARGET]
@@ -128,33 +135,88 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
             train_lfr = train_lfr.reset_index(drop=True)
             train = train_lfr
 
-    # ── Step 3: Synthetic data (S3, S4, S5) ───────────────────────────────
-    if scenario in ['S3', 'S4', 'S5']:
+    # ── Step 3: Synthetic data (S3, S4, S5, S6) ───────────────────────────────
+    if scenario.startswith('S3') or scenario in ['S4', 'S5', 'S6']:
         metadata = SingleTableMetadata()
         metadata.detect_from_dataframe(train)
 
         gen = build_generator(generator_name, metadata)
 
-        if scenario == 'S3':  # Full Augmentation
+        if scenario.startswith('S3'):  # Full Augmentation (alpha)
+            alpha = float(scenario.split('_')[1])
             gen.fit(train)
-            synth = gen.sample(len(train))
-            train_final = pd.concat([train, synth], ignore_index=True)
+            n_to_generate = int((alpha - 1.0) * len(train))
+            if n_to_generate > 0:
+                synth = gen.sample(n_to_generate)
+                train_final = pd.concat([train, synth], ignore_index=True)
+            else:
+                synth = pd.DataFrame()
+                train_final = train
 
-        elif scenario == 'S4':  # Minority Group Only (race == 0 = African-American)
-            minority = train[train[SENSITIVE] == 0]
-            gen.fit(minority) # Fit ONLY on minority for proper contextual conditionals
-            synth = gen.sample(len(minority))
-            train_final = pd.concat([train, synth], ignore_index=True)
+        elif scenario == 'S4':  # Equalize all Sensitive x Target groups
+            group_counts = train.groupby([SENSITIVE, TARGET]).size()
+            max_count = group_counts.max()
+            
+            synths = []
+            for (sens_val, targ_val), count in group_counts.items():
+                if count < max_count:
+                    n_to_generate = max_count - count
+                    subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
+                    gen.fit(subset)
+                    synth_subset = gen.sample(n_to_generate)
+                    synths.append(synth_subset)
+            
+            if synths:
+                synth = pd.concat(synths, ignore_index=True)
+                train_final = pd.concat([train, synth], ignore_index=True)
+            else:
+                synth = pd.DataFrame()
+                train_final = train
 
-        elif scenario == 'S5':  # Combined — synth from already-mitigated train
+        elif scenario == 'S5':  # Generate up to N_ideal = total / 4
+            n_ideal = len(train) // 4
+            group_counts = train.groupby([SENSITIVE, TARGET]).size()
+            
+            synths = []
+            for (sens_val, targ_val), count in group_counts.items():
+                if count < n_ideal:
+                    n_to_generate = n_ideal - count
+                    subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
+                    gen.fit(subset)
+                    synth_subset = gen.sample(n_to_generate)
+                    synths.append(synth_subset)
+                    
+            if synths:
+                synth = pd.concat(synths, ignore_index=True)
+                train_final = pd.concat([train, synth], ignore_index=True)
+            else:
+                synth = pd.DataFrame()
+                train_final = train
+
+        elif scenario == 'S6':  # Hybrid — synth from already-mitigated train + S5 logic
             if weights is not None:
                 train_for_gen = train.sample(n=len(train), replace=True, weights=weights, random_state=seed)
             else:
                 train_for_gen = train
                 
-            gen.fit(train_for_gen)
-            synth = gen.sample(len(train))
-            train_final = pd.concat([train, synth], ignore_index=True)
+            n_ideal = len(train_for_gen) // 4
+            group_counts = train_for_gen.groupby([SENSITIVE, TARGET]).size()
+            
+            synths = []
+            for (sens_val, targ_val), count in group_counts.items():
+                if count < n_ideal:
+                    n_to_generate = n_ideal - count
+                    subset = train_for_gen[(train_for_gen[SENSITIVE] == sens_val) & (train_for_gen[TARGET] == targ_val)]
+                    gen.fit(subset)
+                    synth_subset = gen.sample(n_to_generate)
+                    synths.append(synth_subset)
+                    
+            if synths:
+                synth = pd.concat(synths, ignore_index=True)
+                train_final = pd.concat([train, synth], ignore_index=True)
+            else:
+                synth = pd.DataFrame()
+                train_final = train
             
             # Recompute weights on expanded set if Reweighing was used
             if weights is not None:
@@ -169,13 +231,13 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
                        metadata_info={'generator': generator_name,
                                       'scenario': scenario, 'seed': seed,
                                       'n_samples': len(synth),
-                                      'strategy': 'full' if scenario in ['S3', 'S5'] else 'minority'})
+                                      'strategy': scenario})
     else:
         train_final = train
 
     # ── Step 4 & 5: Train and Evaluate ────────────────────────────────────
     # Apply mitigator on test set if necessary
-    if scenario in ['S2', 'S5']:
+    if scenario in ['S2', 'S6']:
         if mitigator_name == 'DIRemover':
             bld_test = BinaryLabelDataset(df=test, label_names=[TARGET], protected_attribute_names=[SENSITIVE])
             test_repaired = dir_remover.fit_transform(bld_test)
@@ -273,7 +335,7 @@ def main():
     total_tasks = 0
     for sc in SCENARIOS:
         gens = len(GENERATORS_FOR[sc])
-        mits = len(MITIGATORS) if sc in ['S2', 'S5'] else 1
+        mits = len(MITIGATORS) if sc == 'S2' else 1
         total_tasks += gens * mits * len(seeds)
         
     done_tasks = len(processed)
@@ -286,7 +348,7 @@ def main():
 
         for scenario in SCENARIOS:
             generators = GENERATORS_FOR[scenario]
-            mits = MITIGATORS if scenario in ['S2', 'S5'] else ['None']
+            mits = MITIGATORS if scenario == 'S2' else (['Reweighing'] if scenario == 'S6' else ['None'])
             pbar.set_description(f'{SCENARIO_LABELS[scenario][:42]}')
 
             for mitigator in mits:
