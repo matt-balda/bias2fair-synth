@@ -10,7 +10,7 @@ def check_demographic_parity(df, target_col='two_year_recid', sensitive_col='rac
     p_unpriv = pos_counts.get(unpriv_val, 0) / counts.get(unpriv_val, 1)
     diff = p_unpriv - p_priv
     
-    print("\n[📊 Demographic Parity]")
+    print("\n[Demographic Parity]")
     print(f" P(Y=1 | Privileged={priv_val}):   {p_priv:.4f} ({pos_counts.get(priv_val, 0)}/{counts.get(priv_val, 0)})")
     print(f" P(Y=1 | Unprivileged={unpriv_val}): {p_unpriv:.4f} ({pos_counts.get(unpriv_val, 0)}/{counts.get(unpriv_val, 0)})")
     print(f" Difference (Unpriv-Priv): {diff:.4f} | Gap: {abs(diff):.4f}\n")

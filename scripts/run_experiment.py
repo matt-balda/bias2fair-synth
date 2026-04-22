@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
@@ -226,18 +225,20 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
                 _, w2 = rw2.fit_transform(X_rw2, y_rw2)
                 weights = w2.values if hasattr(w2, 'values') else np.asarray(w2)
 
-        # Save synthetic data
-        save_synthetic(synth, scenario, generator_name, seed,
-                       metadata_info={'generator': generator_name,
-                                      'scenario': scenario, 'seed': seed,
-                                      'n_samples': len(synth),
-                                      'strategy': scenario})
+        # Save synthetic data only if something was actually generated
+        if synth is not None and len(synth) > 0:
+            save_synthetic(synth, scenario, generator_name, seed,
+                           metadata_info={'generator': generator_name,
+                                          'scenario': scenario, 'seed': seed,
+                                          'n_samples': len(synth),
+                                          'strategy': scenario})
     else:
         train_final = train
 
     # ── Step 4 & 5: Train and Evaluate ────────────────────────────────────
     # Apply mitigator on test set if necessary
-    if scenario in ['S2', 'S6']:
+    # Apply DIRemover/LFR on test only for S2 (S6 uses only Reweighing, no test transform needed)
+    if scenario == 'S2':
         if mitigator_name == 'DIRemover':
             bld_test = BinaryLabelDataset(df=test, label_names=[TARGET], protected_attribute_names=[SENSITIVE])
             test_repaired = dir_remover.fit_transform(bld_test)
@@ -335,6 +336,7 @@ def main():
     total_tasks = 0
     for sc in SCENARIOS:
         gens = len(GENERATORS_FOR[sc])
+        # S2 iterates over all mitigators; S6 uses only Reweighing (1 mitigator)
         mits = len(MITIGATORS) if sc == 'S2' else 1
         total_tasks += gens * mits * len(seeds)
         
