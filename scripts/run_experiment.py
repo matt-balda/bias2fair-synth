@@ -176,7 +176,8 @@ def run_single(scenario, generator_name, seed, data, pbar=None):
         y_pred = model.predict(X_test_scaled)
         y_prob = model.predict_proba(X_test_scaled)[:, 1]
 
-        metrics = calculate_metrics(y_test, y_pred, y_prob, s_test)
+        save_path = os.path.join('outputs', 'predictions', f"{DATASET}_{scenario}_{generator_name}_{model_name}_seed{seed}.csv")
+        metrics = calculate_metrics(y_test, y_pred, y_prob, s_test, save_path=save_path)
         metrics.update({
             'dataset':   DATASET,
             'scenario':  scenario,

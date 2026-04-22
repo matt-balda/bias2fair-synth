@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
@@ -11,10 +12,20 @@ from fairlearn.metrics import (
     equal_opportunity_difference
 )
 
-def calculate_metrics(y_true, y_pred, y_prob, sensitive_features):
+def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None):
     """
     Calculates all metrics defined in the protocol.
     """
+    if save_path is not None:
+        if os.path.dirname(save_path):
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        pd.DataFrame({
+            'y_true': np.array(y_true),
+            'y_pred': np.array(y_pred),
+            'y_prob': np.array(y_prob),
+            'sensitive_features': np.array(sensitive_features)
+        }).to_csv(save_path, index=False)
+
     metrics = {}
     
     # Performance
