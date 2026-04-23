@@ -235,8 +235,11 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
     else:
         train_final = train
 
-    # ── Step 4 & 5: Train and Evaluate ────────────────────────────────────
-    # Apply mitigator on test set if necessary
+    # Capture sensitive and target from ORIGINAL test (before any transformation)
+    # This ensures fairness metrics reflect real-world group membership, not transformed spaces
+    s_test = test[SENSITIVE].values.copy()
+    y_test_orig = test[TARGET].values.copy()
+
     # Apply DIRemover/LFR on test only for S2 (S6 uses only Reweighing, no test transform needed)
     if scenario == 'S2':
         if mitigator_name == 'DIRemover':
@@ -259,7 +262,6 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
     y_train = train_final[TARGET]
     X_test  = test.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
     y_test  = test[TARGET]
-    s_test  = test[SENSITIVE]
     
     # Standard scale features
     num_cols = X_train.select_dtypes(include=['int64', 'int32', 'float64', 'float32', 'uint8']).columns
