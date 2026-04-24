@@ -33,7 +33,7 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None
     metrics['auc_roc'] = roc_auc_score(y_true, y_prob)
     metrics['auc_pr'] = average_precision_score(y_true, y_prob)
     metrics['recall'] = recall_score(y_true, y_pred)
-    metrics['precision'] = precision_score(y_true, y_pred)
+    metrics['precision'] = precision_score(y_true, y_pred)  
     metrics['accuracy'] = accuracy_score(y_true, y_pred)
     
     # Fairness (Signed metrics: Unprivileged - Privileged)
