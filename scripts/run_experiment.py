@@ -15,6 +15,7 @@ from aif360.algorithms.preprocessing import DisparateImpactRemover
 from aif360.datasets import BinaryLabelDataset
 from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer, TVAESynthesizer
 from sdv.metadata import SingleTableMetadata
+from sdv.sampling import Condition
 from tqdm import tqdm
 import logging
 
@@ -59,7 +60,6 @@ SCENARIO_LABELS = {
 }
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def get_models(seed):
     return {
         'LogisticRegression': LogisticRegression(random_state=seed, max_iter=1000),
@@ -99,6 +99,10 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
         data, test_size=0.2, random_state=seed,
         stratify=data[[TARGET, SENSITIVE]]
     )
+    # Defensive copies — prevents mutations inside run_single from bleeding
+    # into subsequent calls that share the same `data` object (Fix #3)
+    train = train.copy()
+    test  = test.copy()
 
     weights = None
     dir_remover = None
@@ -155,16 +159,27 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
         elif scenario == 'S4':  # Equalize all Sensitive x Target groups
             group_counts = train.groupby([SENSITIVE, TARGET]).size()
             max_count = group_counts.max()
-            
+
+            # Fix #2: fit once on full train, then use conditional sampling
+            gen.fit(train)
+
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < max_count:
                     n_to_generate = max_count - count
-                    subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
-                    gen.fit(subset)
-                    synth_subset = gen.sample(n_to_generate)
+                    if hasattr(gen, 'sample_from_conditions'):
+                        cond = Condition(
+                            num_rows=n_to_generate,
+                            column_values={SENSITIVE: sens_val, TARGET: targ_val}
+                        )
+                        synth_subset = gen.sample_from_conditions(conditions=[cond])
+                    else:  # Fallback for TabDDPM (no conditional API)
+                        subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
+                        tmp_gen = build_generator(generator_name, metadata)
+                        tmp_gen.fit(subset)
+                        synth_subset = tmp_gen.sample(n_to_generate)
                     synths.append(synth_subset)
-            
+
             if synths:
                 synth = pd.concat(synths, ignore_index=True)
                 train_final = pd.concat([train, synth], ignore_index=True)
@@ -175,16 +190,27 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
         elif scenario == 'S5':  # Generate up to N_ideal = total / 4
             n_ideal = len(train) // 4
             group_counts = train.groupby([SENSITIVE, TARGET]).size()
-            
+
+            # Fix #2: fit once on full train, then use conditional sampling
+            gen.fit(train)
+
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < n_ideal:
                     n_to_generate = n_ideal - count
-                    subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
-                    gen.fit(subset)
-                    synth_subset = gen.sample(n_to_generate)
+                    if hasattr(gen, 'sample_from_conditions'):
+                        cond = Condition(
+                            num_rows=n_to_generate,
+                            column_values={SENSITIVE: sens_val, TARGET: targ_val}
+                        )
+                        synth_subset = gen.sample_from_conditions(conditions=[cond])
+                    else:  # Fallback for TabDDPM (no conditional API)
+                        subset = train[(train[SENSITIVE] == sens_val) & (train[TARGET] == targ_val)]
+                        tmp_gen = build_generator(generator_name, metadata)
+                        tmp_gen.fit(subset)
+                        synth_subset = tmp_gen.sample(n_to_generate)
                     synths.append(synth_subset)
-                    
+
             if synths:
                 synth = pd.concat(synths, ignore_index=True)
                 train_final = pd.concat([train, synth], ignore_index=True)
@@ -197,26 +223,37 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
                 train_for_gen = train.sample(n=len(train), replace=True, weights=weights, random_state=seed)
             else:
                 train_for_gen = train
-                
+
             n_ideal = len(train_for_gen) // 4
             group_counts = train_for_gen.groupby([SENSITIVE, TARGET]).size()
-            
+
+            # Fix #2: fit once on full (possibly reweighed) train, then use conditional sampling
+            gen.fit(train_for_gen)
+
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < n_ideal:
                     n_to_generate = n_ideal - count
-                    subset = train_for_gen[(train_for_gen[SENSITIVE] == sens_val) & (train_for_gen[TARGET] == targ_val)]
-                    gen.fit(subset)
-                    synth_subset = gen.sample(n_to_generate)
+                    if hasattr(gen, 'sample_from_conditions'):
+                        cond = Condition(
+                            num_rows=n_to_generate,
+                            column_values={SENSITIVE: sens_val, TARGET: targ_val}
+                        )
+                        synth_subset = gen.sample_from_conditions(conditions=[cond])
+                    else:  # Fallback for TabDDPM (no conditional API)
+                        subset = train_for_gen[(train_for_gen[SENSITIVE] == sens_val) & (train_for_gen[TARGET] == targ_val)]
+                        tmp_gen = build_generator(generator_name, metadata)
+                        tmp_gen.fit(subset)
+                        synth_subset = tmp_gen.sample(n_to_generate)
                     synths.append(synth_subset)
-                    
+
             if synths:
                 synth = pd.concat(synths, ignore_index=True)
                 train_final = pd.concat([train, synth], ignore_index=True)
             else:
                 synth = pd.DataFrame()
                 train_final = train
-            
+
             # Recompute weights on expanded set if Reweighing was used
             if weights is not None:
                 X_rw2 = train_final.drop(columns=[TARGET]).set_index(SENSITIVE, drop=False)
@@ -244,7 +281,9 @@ def run_single(scenario, generator_name, mitigator_name, seed, data, pbar=None):
     if scenario == 'S2':
         if mitigator_name == 'DIRemover':
             bld_test = BinaryLabelDataset(df=test, label_names=[TARGET], protected_attribute_names=[SENSITIVE])
-            test_repaired = dir_remover.fit_transform(bld_test)
+            # Fix #1: use .transform() only — fitting on test would leak test
+            # distribution into the repair parameters (data leakage)
+            test_repaired = dir_remover.transform(bld_test)
             test_repaired_df, _ = test_repaired.convert_to_dataframe()
             for col in test.columns:
                 if col in test_repaired_df.columns:
