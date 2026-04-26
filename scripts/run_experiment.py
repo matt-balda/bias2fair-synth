@@ -23,6 +23,8 @@ def _logged_print(*args, **kwargs):
             with open('experiment.log', 'a', encoding='utf-8') as f:
                 ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 f.write(f"[{ts}] {msg}\n")
+                f.flush()
+                os.fsync(f.fileno())
         except Exception:
             pass
 
@@ -432,6 +434,14 @@ def run_for_dataset(dataset_name: str) -> None:
                             all_results.extend(res)
                             processed.add((scenario, mitigator, gen, seed))
                             pd.DataFrame(all_results).to_csv(csv_path, index=False)
+                            try:
+                                with open('experiment.log', 'a', encoding='utf-8') as f:
+                                    ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    f.write(f"[{ts}] ✔ Completed: {scenario} | {mitigator} | {gen} | seed={seed}\n")
+                                    f.flush()
+                                    os.fsync(f.fileno())
+                            except Exception:
+                                pass
                         except Exception as e:
                             err_msg = f'  ⚠ Error [{scenario}/{mitigator}/{gen}/seed={seed}]: {e}'
                             tqdm.write(err_msg)
