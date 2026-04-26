@@ -65,12 +65,21 @@ def di_from_pred(y_pred, sensitive):
 
 def main():
     parser = argparse.ArgumentParser(description='Fairness data analysis plots.')
-    parser.add_argument('--dataset', type=str, default='compas',
+    parser.add_argument('--dataset', nargs='+', default=['compas'],
                         choices=['compas', 'adult', 'diabetes'],
-                        help='Dataset to analyse (default: compas)')
+                        metavar='DATASET',
+                        help='One or more datasets to analyse (default: compas)')
     args = parser.parse_args()
-    dataset_name = args.dataset
+    datasets = list(dict.fromkeys(d.lower() for d in args.dataset))
 
+    for i, dataset_name in enumerate(datasets, 1):
+        print(f'\n  [{i}/{len(datasets)}] {dataset_name.upper()}')
+        run_for_dataset(dataset_name)
+
+    print(f'\n  All done: {", ".join(d.upper() for d in datasets)}')
+
+
+def run_for_dataset(dataset_name: str) -> None:
     cfg = DATASET_CONFIGS[dataset_name]
     data = cfg['loader']()
     TARGET    = cfg['target']
@@ -91,6 +100,7 @@ def main():
     # 1. Bhattacharyya Overlap
     # =========================================================================
     print("Gerando: Bhattacharyya Overlap...")
+
     numeric_cols = X_raw.select_dtypes(include=[np.number]).columns.tolist()
     bhat = {}
     for col in numeric_cols:

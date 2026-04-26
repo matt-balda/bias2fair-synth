@@ -139,33 +139,40 @@ def main():
     from utils.data_loader import load_dataset, DATASET_CONFIGS
 
     parser = argparse.ArgumentParser(description='Distribution and correlation plots.')
-    parser.add_argument('--dataset', type=str, default='compas',
+    parser.add_argument('--dataset', nargs='+', default=['compas'],
                         choices=['compas', 'adult', 'diabetes'],
-                        help='Dataset to plot (default: compas)')
+                        metavar='DATASET',
+                        help='One or more datasets to plot (default: compas)')
     args = parser.parse_args()
-    DATASET = args.dataset
+    datasets = list(dict.fromkeys(d.lower() for d in args.dataset))
 
     base = 'plots'
 
-    print('\n' + '═' * 60)
-    print('  bias2fair-synth  ·  Distribuições e Correlações dos Dados Sintéticos')
+    for i, ds in enumerate(datasets, 1):
+        DATASET = ds
+        print(f'\n  [{i}/{len(datasets)}] {ds.upper()}')
+        print('\n' + '═' * 60)
+        print('  bias2fair-synth  ·  Distribuições e Correlações dos Dados Sintéticos')
+        print('═' * 60 + '\n')
+
+        real_data = DATASET_CONFIGS[DATASET]['loader']()
+
+        steps = [
+            ('Real vs Synthetic dists', lambda rd=real_data: plot_distributions(rd, base)),
+            ('Correlation heatmaps',    lambda rd=real_data: plot_correlations(rd, base)),
+        ]
+
+        for label, fn in tqdm(steps, desc='Generating plots', unit='step',
+                              bar_format='  {l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}',
+                              colour='cyan'):
+            tqdm.write(f'  → {label}...')
+            fn()
+
+        print(f'\n  ✔ All plots saved to plots/{DATASET}/')
+
+    print(f'\n  All done: {", ".join(d.upper() for d in datasets)}')
     print('═' * 60 + '\n')
 
-    real_data = DATASET_CONFIGS[DATASET]['loader']()
-
-    steps = [
-        ('Real vs Synthetic dists',    lambda: plot_distributions(real_data, base)),
-        ('Correlation heatmaps',       lambda: plot_correlations(real_data, base)),
-    ]
-
-    for label, fn in tqdm(steps, desc='Generating plots', unit='step',
-                          bar_format='  {l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}',
-                          colour='cyan'):
-        tqdm.write(f'  → {label}...')
-        fn()
-
-    print('\n  ✔ All plots saved to plots/')
-    print('═' * 60 + '\n')
 
 
 if __name__ == '__main__':

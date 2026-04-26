@@ -231,9 +231,10 @@ def plot_pr_curve(seed=42, model='CatBoost', dataset_name='compas'):
 def main():
     global OUT_DIR
     parser = argparse.ArgumentParser(description='Plot utility metrics for bias2fair-synth.')
-    parser.add_argument('--dataset', type=str, default='compas',
+    parser.add_argument('--dataset', nargs='+', default=['compas'],
                         choices=['compas', 'adult', 'diabetes'],
-                        help='Dataset to plot (default: compas)')
+                        metavar='DATASET',
+                        help='One or more datasets to plot (default: compas)')
     parser.add_argument('--model', default='CatBoost',
                         choices=['CatBoost', 'LogisticRegression', 'SVM'],
                         help='Model for ROC/PR traditional curves (default: CatBoost)')
@@ -241,20 +242,26 @@ def main():
                         help='Seed for ROC/PR traditional curves (default: 42)')
     args = parser.parse_args()
 
-    OUT_DIR = os.path.join('plots', args.dataset)
+    datasets = list(dict.fromkeys(d.lower() for d in args.dataset))
+
     apply_theme()
-    df, _ = load_results(args.dataset)
+    for i, ds in enumerate(datasets, 1):
+        print(f'\n  [{i}/{len(datasets)}] {ds.upper()}')
+        OUT_DIR = os.path.join('plots', ds)
+        df, _ = load_results(ds)
 
-    print('\n── Line plots ───────────────────────────────')
-    plot_accuracy_lines(df)
-    plot_auc_pr_lines(df)
-    plot_precision_recall_lines(df)
+        print('\n── Line plots ───────────────────────────────')
+        plot_accuracy_lines(df)
+        plot_auc_pr_lines(df)
+        plot_precision_recall_lines(df)
 
-    print('\n── Traditional curves ───────────────────────')
-    plot_roc_curve(seed=args.seed, model=args.model, dataset_name=args.dataset)
-    plot_pr_curve(seed=args.seed, model=args.model, dataset_name=args.dataset)
+        print('\n── Traditional curves ─────────────────────')
+        plot_roc_curve(seed=args.seed, model=args.model, dataset_name=ds)
+        plot_pr_curve(seed=args.seed, model=args.model, dataset_name=ds)
 
-    print(f'\nDone! All plots saved to {OUT_DIR}/')
+        print(f'  ✔ Done! Plots saved to {OUT_DIR}/')
+
+    print(f'\n  All done: {", ".join(d.upper() for d in datasets)}')
 
 
 if __name__ == '__main__':
