@@ -336,21 +336,11 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
     return results
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='bias2fair-synth — Fairness Experiment Pipeline'
-    )
-    parser.add_argument(
-        '--dataset', type=str, default='compas',
-        choices=list(DATASET_CONFIGS.keys()),
-        help='Dataset to run the experiment on (default: compas)'
-    )
-    args = parser.parse_args()
-
-    dataset_name = args.dataset.lower()
-    cfg          = DATASET_CONFIGS[dataset_name]
-    TARGET       = cfg['target']
-    SENSITIVE    = cfg['sensitive']
+def run_for_dataset(dataset_name: str) -> None:
+    """Run all 6 scenarios for a single dataset."""
+    cfg       = DATASET_CONFIGS[dataset_name]
+    TARGET    = cfg['target']
+    SENSITIVE = cfg['sensitive']
 
     print('\n' + '═' * 60)
     print(f'  bias2fair-synth  ·  Fairness Experiment Pipeline v3')
@@ -362,7 +352,7 @@ def main():
     print(f'\n  ✔ Dataset loaded : {data.shape[0]} records × {data.shape[1]} features')
     print(f'  ✔ Target         : {TARGET}  |  {dict(data[TARGET].value_counts().items())}')
     print(f'  ✔ Sensitive      : {SENSITIVE}  |  '
-          f'0={( data[SENSITIVE]==0).sum()}, 1={(data[SENSITIVE]==1).sum()}')
+          f'0={(data[SENSITIVE]==0).sum()}, 1={(data[SENSITIVE]==1).sum()}')
     print()
 
     seeds = get_fixed_seeds()
@@ -419,7 +409,6 @@ def main():
                             )
                             all_results.extend(res)
                             processed.add((scenario, mitigator, gen, seed))
-                            # Incremental save
                             pd.DataFrame(all_results).to_csv(csv_path, index=False)
                         except Exception as e:
                             tqdm.write(
@@ -438,8 +427,44 @@ def main():
     summary.to_csv(f'outputs/summary_metrics_{dataset_name}.csv')
 
     print('\n' + '─' * 60)
-    print(f'  ✔ All done!  Results in outputs/{dataset_name}_results.csv')
+    print(f'  ✔ Done!  Results in outputs/{dataset_name}_results.csv')
     print('─' * 60 + '\n')
+
+
+def main():
+    all_datasets = list(DATASET_CONFIGS.keys())
+    parser = argparse.ArgumentParser(
+        description='bias2fair-synth — Fairness Experiment Pipeline',
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        '--dataset', nargs='+', default=['compas'],
+        choices=all_datasets,
+        metavar='DATASET',
+        help=(
+            'One or more datasets to run.\n'
+            f'Choices: {all_datasets}\n'
+            'Examples:\n'
+            '  --dataset compas\n'
+            '  --dataset compas adult diabetes'
+        )
+    )
+    args = parser.parse_args()
+
+    datasets = [d.lower() for d in args.dataset]
+    # deduplicate while preserving order
+    seen = set()
+    datasets = [d for d in datasets if not (d in seen or seen.add(d))]
+
+    print(f'\n  Datasets queued: {datasets}')
+
+    for i, dataset_name in enumerate(datasets, 1):
+        print(f'\n  [{i}/{len(datasets)}] Starting: {dataset_name.upper()}')
+        run_for_dataset(dataset_name)
+
+    print('\n' + '═' * 60)
+    print(f'  ✔ All datasets complete: {", ".join(d.upper() for d in datasets)}')
+    print('═' * 60 + '\n')
 
 
 if __name__ == '__main__':
