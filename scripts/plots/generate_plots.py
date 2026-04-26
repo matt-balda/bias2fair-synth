@@ -1,9 +1,6 @@
 """
-generate_plots.py
-Generates all mandatory visualizations as per .agent-context.md §11 + §14:
-  - Per-metric boxplots / violin plots (across seeds)
-  - Grouped bar plots (scenario × generator)
-  - Fairness vs F1 trade-off (Pareto frontier)
+generate_plots.py:
+
   - Real vs Synthetic distributions per feature
   - Correlation heatmaps (Real, Synthetic, Difference)
 """
@@ -18,10 +15,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-from scipy.stats import wilcoxon
-
 # ── Style ──────────────────────────────────────────────────────────────────
-PALETTE = 'Set2'
 plt.rcParams.update({
     'figure.dpi': 150,
     'font.family': 'DejaVu Sans',
@@ -29,18 +23,7 @@ plt.rcParams.update({
     'axes.spines.right': False,
 })
 
-PERF_METRICS    = ['f1', 'auc_roc', 'auc_pr', 'recall', 'precision', 'accuracy']
-FAIRNESS_METRICS = ['disparate_impact', 'statistical_parity_difference',
-                    'equal_opportunity_difference', 'average_absolute_odds_difference']
-ALL_METRICS      = PERF_METRICS + FAIRNESS_METRICS
-
-SCENARIO_ORDER  = ['S1', 'S2', 'S3', 'S4', 'S5']
-GENERATOR_ORDER = ['Baseline', 'GaussianCopula', 'CTGAN', 'TVAE', 'TabDDPM']
-
-TARGET    = 'two_year_recid'
-SENSITIVE = 'race'
 DATASET   = 'compas'
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def makedirs(*parts):
@@ -57,113 +40,6 @@ def save(fig, *parts, tight=True):
     fig.savefig(path, bbox_inches='tight')
     plt.close(fig)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 1.  METRICS PLOTS
-# ══════════════════════════════════════════════════════════════════════════════
-def plot_metric_boxplots(df, base):
-    """Categorical Boxplots per metric, split by predictive Model into columns."""
-    out = makedirs(base, 'metrics', 'boxplots')
-    for metric in tqdm(ALL_METRICS, desc='  Boxplots/Violin', leave=False):
-        if metric not in df.columns:
-            continue
-            
-        order = [g for g in GENERATOR_ORDER if g in df['generator'].unique()]
-        g = sns.catplot(
-            data=df, x='scenario', y=metric, hue='generator', col='model',
-            kind='box', order=SCENARIO_ORDER, hue_order=order,
-            palette=PALETTE, height=5, aspect=1.1, sharey=True,
-            legend_out=True
-        )
-        
-        if metric == 'disparate_impact':
-            for ax in g.axes.flatten():
-                ax.axhline(0.8, color='red', linestyle='--', lw=1.5, zorder=0)
-                
-        g.fig.subplots_adjust(top=0.88)
-        g.fig.suptitle(f'{metric.replace("_", " ").title()} — Distribution across Seeds', fontsize=16)
-        save(g.fig, out, f'{metric}.png')
-
-
-def plot_grouped_bars(df, base):
-    """Grouped bar (mean ± std) per metric, split by predictive Model into columns."""
-    out = makedirs(base, 'metrics', 'grouped_bars')
-    for metric in tqdm(ALL_METRICS, desc='  Grouped bars', leave=False):
-        if metric not in df.columns:
-            continue
-            
-        order = [g for g in GENERATOR_ORDER if g in df['generator'].unique()]
-        g = sns.catplot(
-            data=df, x='scenario', y=metric, hue='generator', col='model',
-            kind='bar', errorbar='sd', order=SCENARIO_ORDER, hue_order=order,
-            palette=PALETTE, height=5, aspect=1.1, sharey=True, capsize=.1,
-            legend_out=True
-        )
-        
-        if metric == 'disparate_impact':
-            for ax in g.axes.flatten():
-                ax.axhline(0.8, color='red', linestyle='--', lw=1.5, zorder=0)
-
-        g.fig.subplots_adjust(top=0.88)
-        g.fig.suptitle(f'{metric.replace("_", " ").title()} (Mean ± Std)', fontsize=16)
-        save(g.fig, out, f'{metric}.png')
-
-
-def plot_tradeoff(df, base):
-    """Fairness vs Performance Pareto plot via relplot."""
-    out = makedirs(base, 'metrics')
-    means = (df.groupby(['scenario', 'generator', 'model'])
-               [['f1', 'disparate_impact']].mean().reset_index())
-               
-    g = sns.relplot(
-        data=means, x='disparate_impact', y='f1', col='model',
-        hue='scenario', style='generator', s=150, alpha=0.85, 
-        palette='viridis', height=5, aspect=1.1, kind='scatter'
-    )
-    
-    for ax in g.axes.flatten():
-        ax.axvline(0.8, color='red', linestyle='--', alpha=0.5, label='80% Rule (Bias limit)')
-        ax.axvline(1.25, color='red', linestyle='--', alpha=0.5) # Upper bound
-        ax.grid(True, alpha=0.3)
-        ax.set_xlabel('Fairness (Disparate Impact)')
-        ax.set_ylabel('Utility (F1-Score)')
-        
-    g.fig.subplots_adjust(top=0.85)
-    g.fig.suptitle('Fairness–Utility Trade-off (Pareto View)', fontsize=16)
-    
-    save(g.fig, out, 'pareto_frontier.png')
-
-
-def plot_wilcoxon_heatmap(df, base):
-    """Wilcoxon p-values: S1 vs all for F1 and Disparate Impact."""
-    out = makedirs(base, 'metrics')
-    models  = df['model'].unique()
-    comparisons = [('S1', 'S2'), ('S1', 'S3'), ('S1', 'S4'), ('S1', 'S5'), ('S2', 'S5')]
-    results = []
-    for s_a, s_b in comparisons:
-        for model in models:
-            gens_b = df[df['scenario'] == s_b]['generator'].unique()
-            for gen_b in gens_b:
-                a = df[(df['scenario'] == s_a) & (df['model'] == model)
-                       & (df['generator'] == 'Baseline')].sort_values('seed')
-                b = df[(df['scenario'] == s_b) & (df['model'] == model)
-                       & (df['generator'] == gen_b)].sort_values('seed')
-                shared = set(a['seed']) & set(b['seed'])
-                a = a[a['seed'].isin(shared)].sort_values('seed')
-                b = b[b['seed'].isin(shared)].sort_values('seed')
-                if len(a) < 3:
-                    continue
-                try:
-                    _, p_f1 = wilcoxon(a['f1'], b['f1'])
-                    _, p_di = wilcoxon(a['disparate_impact'], b['disparate_impact'])
-                    results.append({'comparison': f'{s_a}→{s_b}', 'generator': gen_b,
-                                    'model': model, 'p_f1': p_f1, 'p_di': p_di})
-                except Exception:
-                    pass
-    if results:
-        pd.DataFrame(results).to_csv(os.path.join(base, 'metrics', 'wilcoxon.csv'), index=False)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # 2.  DISTRIBUTION COMPARISON
 # ══════════════════════════════════════════════════════════════════════════════
@@ -176,7 +52,7 @@ def plot_distributions(real_df, base):
     num_cols = real_df.select_dtypes(include='number').columns.tolist()
     cat_cols = real_df.select_dtypes(exclude='number').columns.tolist()
 
-    for scenario in tqdm(os.listdir(synth_root), desc='  Distributions', leave=False):
+    for scenario in tqdm(sorted(os.listdir(synth_root)), desc='  Distributions', leave=False):
         sc_path = os.path.join(synth_root, scenario)
         for generator in os.listdir(sc_path):
             gen_path = os.path.join(sc_path, generator)
@@ -227,7 +103,7 @@ def plot_correlations(real_df, base):
 
     real_corr = real_df.corr(numeric_only=True)
 
-    for scenario in tqdm(os.listdir(synth_root), desc='  Correlations', leave=False):
+    for scenario in tqdm(sorted(os.listdir(synth_root)), desc='  Correlations', leave=False):
         sc_path = os.path.join(synth_root, scenario)
         for generator in os.listdir(sc_path):
             gen_path = os.path.join(sc_path, generator)
@@ -260,25 +136,15 @@ def plot_correlations(real_df, base):
 def main():
     from utils.data_loader import load_compas
 
-    csv_path = 'outputs/compas_results.csv'
-    if not os.path.exists(csv_path):
-        print('✘ No results file found. Run scripts/run_experiment.py first.')
-        return
-
-    df   = pd.read_csv(csv_path)
     base = 'plots'
 
     print('\n' + '═' * 60)
-    print('  bias2fair-synth  ·  Visualization Generator v2')
+    print('  bias2fair-synth  ·  Distribuições e Correlações dos Dados Sintéticos')
     print('═' * 60 + '\n')
 
     real_data = load_compas()
 
     steps = [
-        ('Boxplot/Violin plots',       lambda: plot_metric_boxplots(df, base)),
-        ('Grouped bar plots',          lambda: plot_grouped_bars(df, base)),
-        ('Pareto trade-off plot',      lambda: plot_tradeoff(df, base)),
-        ('Wilcoxon significance',      lambda: plot_wilcoxon_heatmap(df, base)),
         ('Real vs Synthetic dists',    lambda: plot_distributions(real_data, base)),
         ('Correlation heatmaps',       lambda: plot_correlations(real_data, base)),
     ]
