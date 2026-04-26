@@ -1,7 +1,4 @@
 import os
-import io
-import zipfile
-import urllib.request
 import pandas as pd
 import numpy as np
 
@@ -11,19 +8,7 @@ DIABETES_CONFIG = {
     # 0 = AfricanAmerican (unprivileged), 1 = Caucasian (privileged)
 }
 
-_DIABETES_URL = (
-    "https://archive.ics.uci.edu/ml/machine-learning-databases/"
-    "00296/dataset_diabetes.zip"
-)
-
-# Columns to drop before modelling
-_DROP_COLS = [
-    'encounter_id', 'patient_nbr',
-    # High missingness
-    'weight', 'payer_code', 'medical_specialty',
-    # Constant / near-zero variance in cleaned subset
-    'examide', 'citoglipton',
-]
+_CACHE_PATH = "data/diabetes_130.csv"
 
 _MED_COLS = [
     'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
@@ -42,34 +27,45 @@ _AGE_MAP = {
     '[80-90)': 85, '[90-100)': 95,
 }
 
+# High-missingness / identifier columns to drop before modelling
+_DROP_COLS = [
+    'encounter_id', 'patient_nbr',
+    'weight', 'payer_code', 'medical_specialty',
+    'examide', 'citoglipton',
+]
 
-def _download_diabetes(path: str) -> None:
-    """Download the Diabetes 130-US Hospitals ZIP and extract diabetic_data.csv."""
-    print(f"  Downloading Diabetes 130-US dataset to {path}...")
-    with urllib.request.urlopen(_DIABETES_URL) as resp:
-        content = resp.read()
-    with zipfile.ZipFile(io.BytesIO(content)) as zf:
-        csv_name = next(n for n in zf.namelist() if 'diabetic_data' in n)
-        raw = zf.read(csv_name)
+
+def _fetch_and_cache(path: str) -> pd.DataFrame:
+    """Download Diabetes 130-US Hospitals dataset via ucimlrepo (id=296) and cache."""
+    from ucimlrepo import fetch_ucirepo
+    print(f"  Downloading Diabetes 130-US dataset via ucimlrepo (id=296)...")
+    dataset = fetch_ucirepo(id=296)
+    X = dataset.data.features.copy()
+    y = dataset.data.targets.copy()
+    df = pd.concat([X, y], axis=1)
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    with open(path, 'wb') as f:
-        f.write(raw)
-    print(f"  Saved to {path}.")
+    df.to_csv(path, index=False)
+    print(f"  Cached to {path}  ({len(df)} rows).")
+    return df
 
 
-def load_diabetes(path: str = "data/diabetes_130.csv") -> pd.DataFrame:
+def load_diabetes(path: str = _CACHE_PATH) -> pd.DataFrame:
     """
-    Loads and preprocesses the Diabetes 130-US Hospitals dataset (UCI, 1999-2008).
-    Sensitive attribute: race  (0=AfricanAmerican, 1=Caucasian)
-    Target:             readmitted (0=NO, 1=readmitted within <30 or >30 days)
-    """
-    if not os.path.exists(path):
-        _download_diabetes(path)
+    Loads and preprocesses the Diabetes 130-US Hospitals dataset (UCI id=296, 1999-2008).
+    Downloads via ucimlrepo on first call; subsequent calls use the local cache.
 
-    df = pd.read_csv(path, na_values='?', low_memory=False)
+    Sensitive attribute : race       (0=AfricanAmerican, 1=Caucasian)
+    Target              : readmitted (0=NO, 1=readmitted within <30 or >30 days)
+    """
+    if os.path.exists(path):
+        df = pd.read_csv(path, low_memory=False)
+    else:
+        df = _fetch_and_cache(path)
+
+    df = df.copy()
 
     # ── Sensitive: keep only African-American vs Caucasian ───────────────────
-    df = df[df['race'].isin(['AfricanAmerican', 'Caucasian'])].copy()
+    df = df[df['race'].isin(['AfricanAmerican', 'Caucasian'])]
     df['race'] = df['race'].map({'Caucasian': 1, 'AfricanAmerican': 0})
 
     # ── Target: binary readmission ───────────────────────────────────────────
@@ -79,12 +75,14 @@ def load_diabetes(path: str = "data/diabetes_130.csv") -> pd.DataFrame:
     df = df.drop(columns=[c for c in _DROP_COLS if c in df.columns])
 
     # ── Gender ───────────────────────────────────────────────────────────────
-    df['gender'] = df['gender'].map({'Male': 1, 'Female': 0, 'Unknown/Invalid': np.nan})
+    if 'gender' in df.columns:
+        df['gender'] = df['gender'].map({'Male': 1, 'Female': 0, 'Unknown/Invalid': np.nan})
 
-    # ── Age brackets → ordinal ────────────────────────────────────────────────
-    df['age'] = df['age'].map(_AGE_MAP)
+    # ── Age brackets → ordinal midpoints ─────────────────────────────────────
+    if 'age' in df.columns:
+        df['age'] = df['age'].map(_AGE_MAP)
 
-    # ── Medication columns → ordinal (0-3) ───────────────────────────────────
+    # ── Medication columns → ordinal (0–3) ────────────────────────────────────
     for col in _MED_COLS:
         if col in df.columns:
             df[col] = df[col].map(_MED_MAP)
@@ -107,10 +105,6 @@ def load_diabetes(path: str = "data/diabetes_130.csv") -> pd.DataFrame:
 
     # ── Diagnosis codes — drop (high cardinality, leakage risk) ──────────────
     df = df.drop(columns=['diag_1', 'diag_2', 'diag_3'], errors='ignore')
-
-    # ── Admission / discharge type → keep as numeric (already int) ───────────
-    # admission_type_id, discharge_disposition_id, admission_source_id are
-    # integer-coded categoricals; treat as ordinal numerics for simplicity.
 
     return df.dropna().reset_index(drop=True)
 
