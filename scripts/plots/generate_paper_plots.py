@@ -46,7 +46,10 @@ df['scenario_label'] = df.apply(simplify_scenario, axis=1)
 
 # ── PLOT 2.1: Pareto Scatter F1 vs DI ────────────────────────────────────────
 print('Plot 2.1 – Pareto scatter')
-means = df.groupby(['scenario','generator','model'])[['f1','disparate_impact','statistical_parity_difference']].mean().reset_index()
+means = df.groupby(['scenario','generator','model'])[
+    ['f1','disparate_impact','statistical_parity_difference',
+     'equal_opportunity_difference','average_absolute_odds_difference']
+].mean().reset_index()
 
 # Map each scenario row to a fine-grained sub-group label.
 # S2 splits by mitigator (3 variants), S3 splits by alpha suffix (3 variants).
@@ -73,7 +76,8 @@ def get_scenario_group(row):
 # Re-aggregate including mitigator so each variant stays separate.
 means_s2 = df[df['scenario'] == 'S2'].groupby(
     ['scenario', 'mitigator', 'generator', 'model']
-)[['f1', 'disparate_impact', 'statistical_parity_difference']].mean().reset_index()
+)[['f1', 'disparate_impact', 'statistical_parity_difference',
+   'equal_opportunity_difference', 'average_absolute_odds_difference']].mean().reset_index()
 _s2_label_map = {'Reweighing': 'S2_1 (Reweigh)', 'LFR': 'S2_2 (LFR)', 'DIRemover': 'S2_3 (DIR)'}
 means_s2['sg'] = means_s2['mitigator'].map(_s2_label_map).fillna('S2')
 
@@ -135,6 +139,44 @@ ax.set_xlabel('Statistical Parity Difference (SPD)', fontsize=11)
 ax.set_ylabel('F1-Score', fontsize=11)
 ax.set_title('Trade-off F1 × SPD por Cenário', fontsize=13, fontweight='bold')
 save(fig, 'plot2_2_scatter_f1_spd.png')
+
+# ── PLOT 2.3: Scatter F1 vs EOD ──────────────────────────────────────────────
+print('Plot 2.3 – Scatter F1 vs EOD')
+fig, ax = plt.subplots(figsize=(9, 6))
+ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='EOD ideal=0')
+ax.axvspan(-0.1, 0.1, alpha=0.08, color='green')
+for sg, grp in means_full.groupby('sg'):
+    for model, mgrp in grp.groupby('model'):
+        ax.scatter(mgrp['equal_opportunity_difference'], mgrp['f1'],
+                   color=sg_colors.get(sg, 'gray'),
+                   marker=MODEL_MARKERS.get(model, 'o'),
+                   s=70, alpha=0.8, edgecolors='white', linewidths=0.5)
+ax.legend(handles=legend_sc + legend_mod + [
+    plt.Line2D([0],[0], color='green', linestyle='--', label='EOD=0')],
+    loc='upper right', fontsize=8, ncol=2)
+ax.set_xlabel('Equal Opportunity Difference (EOD)', fontsize=11)
+ax.set_ylabel('F1-Score', fontsize=11)
+ax.set_title('Trade-off F1 × EOD por Cenário', fontsize=13, fontweight='bold')
+save(fig, 'plot2_3_scatter_f1_eod.png')
+
+# ── PLOT 2.4: Scatter F1 vs AOD ──────────────────────────────────────────────
+print('Plot 2.4 – Scatter F1 vs AOD')
+fig, ax = plt.subplots(figsize=(9, 6))
+ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='AOD ideal=0')
+ax.axvspan(-0.1, 0.1, alpha=0.08, color='green')
+for sg, grp in means_full.groupby('sg'):
+    for model, mgrp in grp.groupby('model'):
+        ax.scatter(mgrp['average_absolute_odds_difference'], mgrp['f1'],
+                   color=sg_colors.get(sg, 'gray'),
+                   marker=MODEL_MARKERS.get(model, 'o'),
+                   s=70, alpha=0.8, edgecolors='white', linewidths=0.5)
+ax.legend(handles=legend_sc + legend_mod + [
+    plt.Line2D([0],[0], color='green', linestyle='--', label='AOD=0')],
+    loc='upper right', fontsize=8, ncol=2)
+ax.set_xlabel('Average Absolute Odds Difference (AOD)', fontsize=11)
+ax.set_ylabel('F1-Score', fontsize=11)
+ax.set_title('Trade-off F1 × AOD por Cenário', fontsize=13, fontweight='bold')
+save(fig, 'plot2_4_scatter_f1_aod.png')
 
 # ── PLOT 3.1: Violin SPD by Scenario ─────────────────────────────────────────
 print('Plot 3.1 – Violin SPD')
