@@ -1,5 +1,4 @@
 """
-Script para gerar gráficos individuais solicitados:
 1. Bhattacharyya Overlap Coefficient (T5a)
 2. PCA 2D (T5b)
 3. Bootstrap Disparate Impact (DI)
@@ -64,7 +63,7 @@ def di_from_pred(y_pred, sensitive):
     return p[s == 0].mean() / pr1 if pr1 > 0 else np.nan
 
 def main():
-    print("Iniciando processamento de gráficos individuais...")
+    
     data = load_compas()
     TARGET    = 'two_year_recid'
     SENSITIVE = 'race'
