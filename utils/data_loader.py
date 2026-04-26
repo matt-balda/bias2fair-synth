@@ -1,44 +1,60 @@
-import pandas as pd
-import numpy as np
+"""
+Unified data loader — factory entry point.
 
-def load_compas(path="data/compas-scores-two-years.csv"):
-    """
-    Loads and cleans the COMPAS dataset as per standard ProPublica guidelines.
-    """
-    df = pd.read_csv(path)
-    
-    # Standard filtering criteria
-    df = df[
-        (df['days_b_screening_arrest'] <= 30) &
-        (df['days_b_screening_arrest'] >= -30) &
-        (df['is_recid'] != -1) &
-        (df['c_charge_degree'] != 'O') &
-        (df['score_text'] != 'N/A')
-    ]
-    
-    # Selection of relevant columns
-    cols = [
-        'sex', 'age', 'age_cat', 'race', 
-        'juv_fel_count', 'juv_misd_count', 'juv_other_count', 
-        'priors_count', 'c_charge_degree', 'two_year_recid'
-    ]
-    df = df[cols]
-    
-    # Binary race: African-American vs Caucasian
-    df = df[df['race'].isin(['African-American', 'Caucasian'])]
-    
-    # Binary encoding
-    df['sex'] = df['sex'].map({'Male': 1, 'Female': 0})
-    df['race'] = df['race'].map({'Caucasian': 1, 'African-American': 0}) # 1: Privileged, 0: Unprivileged
-    df['c_charge_degree'] = df['c_charge_degree'].map({'F': 1, 'M': 0})
-    
-    # One-hot encoding for categorical cat categories if needed, but COMPAS is simple
-    df = pd.get_dummies(df, columns=['age_cat'], drop_first=True, dtype=int)
-    
-    return df.dropna()
+Usage:
+    from utils.data_loader import load_dataset, DATASET_CONFIGS
+    data = load_dataset('adult')
 
-if __name__ == "__main__":
-    data = load_compas()
-    print(f"Dataset loaded: {data.shape}")
-    print(f"Target distribution:\n{data['two_year_recid'].value_counts(normalize=True)}")
-    print(f"Race distribution:\n{data['race'].value_counts(normalize=True)}")
+Individual loaders are also importable directly:
+    from utils.data_loader import load_compas, load_adult, load_diabetes
+"""
+
+from utils.data_loader_compas   import load_compas,   COMPAS_CONFIG
+from utils.data_loader_adult    import load_adult,    ADULT_CONFIG
+from utils.data_loader_diabetes import load_diabetes, DIABETES_CONFIG
+
+# Mapping: dataset name → {loader, target, sensitive}
+DATASET_CONFIGS = {
+    'compas': {
+        'loader':    load_compas,
+        'target':    COMPAS_CONFIG['target'],
+        'sensitive': COMPAS_CONFIG['sensitive'],
+    },
+    'adult': {
+        'loader':    load_adult,
+        'target':    ADULT_CONFIG['target'],
+        'sensitive': ADULT_CONFIG['sensitive'],
+    },
+    'diabetes': {
+        'loader':    load_diabetes,
+        'target':    DIABETES_CONFIG['target'],
+        'sensitive': DIABETES_CONFIG['sensitive'],
+    },
+}
+
+
+def load_dataset(name: str, **kwargs):
+    """
+    Load a dataset by name.
+
+    Args:
+        name:   One of 'compas', 'adult', 'diabetes'.
+        **kwargs: Forwarded to the individual loader (e.g. path='data/...').
+
+    Returns:
+        pd.DataFrame with binary target and binary sensitive attribute columns.
+    """
+    name = name.lower()
+    if name not in DATASET_CONFIGS:
+        raise ValueError(
+            f"Unknown dataset '{name}'. "
+            f"Available: {list(DATASET_CONFIGS.keys())}"
+        )
+    return DATASET_CONFIGS[name]['loader'](**kwargs)
+
+
+__all__ = [
+    'load_dataset', 'DATASET_CONFIGS',
+    'load_compas', 'load_adult', 'load_diabetes',
+    'COMPAS_CONFIG', 'ADULT_CONFIG', 'DIABETES_CONFIG',
+]

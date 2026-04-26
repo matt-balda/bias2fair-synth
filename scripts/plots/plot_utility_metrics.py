@@ -38,7 +38,8 @@ SCENARIO_LABELS = {
     'S6':     'S6\nRew+Synth',
 }
 
-OUT_DIR = 'plots/compas'
+# OUT_DIR is set after argparse in main()
+OUT_DIR = 'plots/compas'  # default; overridden at runtime
 
 # ── Theme & Helpers ───────────────────────────────────────────────────────────
 def apply_theme():
@@ -54,9 +55,9 @@ def save_fig(fig, filename, dpi=300):
     print(f'  saved → {path}')
 
 
-def load_results():
-    """Load compas_results.csv with ordered scenario_label column."""
-    df = pd.read_csv('outputs/compas_results.csv')
+def load_results(dataset_name: str):
+    """Load {dataset}_results.csv with ordered scenario_label column."""
+    df = pd.read_csv(f'outputs/{dataset_name}_results.csv')
     df['scenario_label'] = df['scenario'].map(SCENARIO_LABELS).fillna(df['scenario'])
     label_seq = [SCENARIO_LABELS.get(s, s) for s in SCENARIO_ORDER]
     present = [l for l in label_seq if l in df['scenario_label'].unique()]
@@ -146,15 +147,16 @@ def plot_precision_recall_lines(df):
 
 
 # ── Traditional curves ────────────────────────────────────────────────────────
-def _load_predictions(seed, model):
+def _load_predictions(seed, model, dataset_name='compas'):
     """Return dict {label: DataFrame} for each scenario prediction file."""
+    d = dataset_name
     scenarios = {
-        'S1 (Baseline)':          f'outputs/predictions/compas_S1_None_Baseline_{model}_seed{seed}.csv',
-        'S2 (Reweighing)':        f'outputs/predictions/compas_S2_Reweighing_Baseline_{model}_seed{seed}.csv',
-        'S3 (Aug-CTGAN 1.5x)':    f'outputs/predictions/compas_S3_1.5_None_CTGAN_{model}_seed{seed}.csv',
-        'S4 (Full Synth-CTGAN)':  f'outputs/predictions/compas_S4_None_CTGAN_{model}_seed{seed}.csv',
-        'S5 (Conditional-CTGAN)': f'outputs/predictions/compas_S5_None_CTGAN_{model}_seed{seed}.csv',
-        'S6 (Hybrid-CTGAN)':      f'outputs/predictions/compas_S6_Reweighing_CTGAN_{model}_seed{seed}.csv',
+        'S1 (Baseline)':          f'outputs/predictions/{d}_S1_None_Baseline_{model}_seed{seed}.csv',
+        'S2 (Reweighing)':        f'outputs/predictions/{d}_S2_Reweighing_Baseline_{model}_seed{seed}.csv',
+        'S3 (Aug-CTGAN 1.5x)':    f'outputs/predictions/{d}_S3_1.5_None_CTGAN_{model}_seed{seed}.csv',
+        'S4 (Full Synth-CTGAN)':  f'outputs/predictions/{d}_S4_None_CTGAN_{model}_seed{seed}.csv',
+        'S5 (Conditional-CTGAN)': f'outputs/predictions/{d}_S5_None_CTGAN_{model}_seed{seed}.csv',
+        'S6 (Hybrid-CTGAN)':      f'outputs/predictions/{d}_S6_Reweighing_CTGAN_{model}_seed{seed}.csv',
     }
     loaded = {}
     for label, path in scenarios.items():
@@ -165,9 +167,9 @@ def _load_predictions(seed, model):
     return loaded
 
 
-def plot_roc_curve(seed=42, model='CatBoost'):
+def plot_roc_curve(seed=42, model='CatBoost', dataset_name='compas'):
     print(f'Plotting ROC curve (model={model}, seed={seed})...')
-    preds = _load_predictions(seed, model)
+    preds = _load_predictions(seed, model, dataset_name)
     if not preds:
         print('  [SKIP] No prediction files found.')
         return
@@ -193,9 +195,9 @@ def plot_roc_curve(seed=42, model='CatBoost'):
     save_fig(fig, 'roc_curve_traditional.png')
 
 
-def plot_pr_curve(seed=42, model='CatBoost'):
+def plot_pr_curve(seed=42, model='CatBoost', dataset_name='compas'):
     print(f'Plotting PR curve (model={model}, seed={seed})...')
-    preds = _load_predictions(seed, model)
+    preds = _load_predictions(seed, model, dataset_name)
     if not preds:
         print('  [SKIP] No prediction files found.')
         return
@@ -227,7 +229,11 @@ def plot_pr_curve(seed=42, model='CatBoost'):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    global OUT_DIR
     parser = argparse.ArgumentParser(description='Plot utility metrics for bias2fair-synth.')
+    parser.add_argument('--dataset', type=str, default='compas',
+                        choices=['compas', 'adult', 'diabetes'],
+                        help='Dataset to plot (default: compas)')
     parser.add_argument('--model', default='CatBoost',
                         choices=['CatBoost', 'LogisticRegression', 'SVM'],
                         help='Model for ROC/PR traditional curves (default: CatBoost)')
@@ -235,8 +241,9 @@ def main():
                         help='Seed for ROC/PR traditional curves (default: 42)')
     args = parser.parse_args()
 
+    OUT_DIR = os.path.join('plots', args.dataset)
     apply_theme()
-    df, _ = load_results()
+    df, _ = load_results(args.dataset)
 
     print('\n── Line plots ───────────────────────────────')
     plot_accuracy_lines(df)
@@ -244,8 +251,8 @@ def main():
     plot_precision_recall_lines(df)
 
     print('\n── Traditional curves ───────────────────────')
-    plot_roc_curve(seed=args.seed, model=args.model)
-    plot_pr_curve(seed=args.seed, model=args.model)
+    plot_roc_curve(seed=args.seed, model=args.model, dataset_name=args.dataset)
+    plot_pr_curve(seed=args.seed, model=args.model, dataset_name=args.dataset)
 
     print(f'\nDone! All plots saved to {OUT_DIR}/')
 

@@ -23,7 +23,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
-from utils.data_loader import load_compas
+import argparse
+from utils.data_loader import load_dataset, DATASET_CONFIGS
 
 # ── Paleta ───────────────────────────────────────────────────────────────────
 BG     = '#ffffff'
@@ -63,10 +64,17 @@ def di_from_pred(y_pred, sensitive):
     return p[s == 0].mean() / pr1 if pr1 > 0 else np.nan
 
 def main():
-    
-    data = load_compas()
-    TARGET    = 'two_year_recid'
-    SENSITIVE = 'race'
+    parser = argparse.ArgumentParser(description='Fairness data analysis plots.')
+    parser.add_argument('--dataset', type=str, default='compas',
+                        choices=['compas', 'adult', 'diabetes'],
+                        help='Dataset to analyse (default: compas)')
+    args = parser.parse_args()
+    dataset_name = args.dataset
+
+    cfg = DATASET_CONFIGS[dataset_name]
+    data = cfg['loader']()
+    TARGET    = cfg['target']
+    SENSITIVE = cfg['sensitive']
 
     X_raw = data.drop(columns=[TARGET])
     y     = data[TARGET].values
@@ -76,7 +84,7 @@ def main():
     scaler   = StandardScaler()
     X_scaled = scaler.fit_transform(X_raw)
 
-    out_dir = 'plots/compas/individual'
+    out_dir = os.path.join('plots', dataset_name, 'individual')
     os.makedirs(out_dir, exist_ok=True)
 
     # =========================================================================

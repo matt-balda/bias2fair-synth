@@ -33,12 +33,22 @@ import matplotlib.gridspec as gridspec
 import seaborn as sns
 from scipy.spatial.distance import jensenshannon
 
-from utils.data_loader import load_compas
+from utils.data_loader import load_dataset, DATASET_CONFIGS
+
+# ── CLI args ─────────────────────────────────────────────────────────────────
+import argparse
+parser = argparse.ArgumentParser(description='SDV fidelity plots.')
+parser.add_argument('--dataset', type=str, default='compas',
+                    choices=['compas', 'adult', 'diabetes'],
+                    help='Dataset to analyse (default: compas)')
+parser.add_argument('--scenario', type=str, default='S3_2.0',
+                    help='Reference scenario for fidelity (default: S3_2.0)')
+args = parser.parse_args()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SYNTH_ROOT         = os.path.join('synthetic_data', 'compas')
-OUT_DIR            = os.path.join('plots', 'paper')
-REFERENCE_SCENARIO = 'S3_2.0'
+SYNTH_ROOT         = os.path.join('synthetic_data', args.dataset)
+OUT_DIR            = os.path.join('plots', args.dataset, 'paper')
+REFERENCE_SCENARIO = args.scenario
 GENERATORS         = ['CTGAN', 'GaussianCopula', 'TVAE', 'TabDDPM']
 CANONICAL_SEED     = 42   # seed used for the KDE overlay visual
 
@@ -276,9 +286,11 @@ def plot_kde_overlay(real_df: pd.DataFrame, gen: str):
 def main():
     print('\n' + '═' * 65)
     print(f'  plot_sdv_fidelity.py  ·  Fidelity Analysis  [{REFERENCE_SCENARIO}]')
+    print(f'  Dataset: {args.dataset.upper()}')
     print('═' * 65 + '\n')
 
-    real_df = load_compas()
+    cfg = DATASET_CONFIGS[args.dataset]
+    real_df = cfg['loader']()
     print(f'  Real data  : {len(real_df)} rows × {real_df.shape[1]} cols')
     print(f'  Scenario   : {REFERENCE_SCENARIO}')
     print(f'  Generators : {", ".join(GENERATORS)}')

@@ -23,7 +23,7 @@ plt.rcParams.update({
     'axes.spines.right': False,
 })
 
-DATASET   = 'compas'
+DATASET   = 'compas'   # overridden by --dataset CLI arg below
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def makedirs(*parts):
@@ -134,7 +134,16 @@ def plot_correlations(real_df, base):
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 def main():
-    from utils.data_loader import load_compas
+    global DATASET
+    import argparse
+    from utils.data_loader import load_dataset, DATASET_CONFIGS
+
+    parser = argparse.ArgumentParser(description='Distribution and correlation plots.')
+    parser.add_argument('--dataset', type=str, default='compas',
+                        choices=['compas', 'adult', 'diabetes'],
+                        help='Dataset to plot (default: compas)')
+    args = parser.parse_args()
+    DATASET = args.dataset
 
     base = 'plots'
 
@@ -142,7 +151,7 @@ def main():
     print('  bias2fair-synth  ·  Distribuições e Correlações dos Dados Sintéticos')
     print('═' * 60 + '\n')
 
-    real_data = load_compas()
+    real_data = DATASET_CONFIGS[DATASET]['loader']()
 
     steps = [
         ('Real vs Synthetic dists',    lambda: plot_distributions(real_data, base)),

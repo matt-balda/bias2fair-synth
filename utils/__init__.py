@@ -1,2 +1,2 @@
-#from .data_loader import load_compas
-#from .check_parity import check_parity
+from .data_loader import load_dataset, DATASET_CONFIGS
+from .data_loader import load_compas, load_adult, load_diabetes

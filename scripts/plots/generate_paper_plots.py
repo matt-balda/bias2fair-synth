@@ -1,5 +1,6 @@
 import warnings
 warnings.filterwarnings('ignore')
+import argparse
 import os
 import pandas as pd
 import numpy as np
@@ -15,7 +16,14 @@ PALETTE = {'S1':'#e63946','S2':'#457b9d','S3':'#2a9d8f','S4':'#e9c46a','S5':'#f4
 MODEL_MARKERS = {'LogisticRegression':'o','SVM':'s','CatBoost':'D'}
 GENERATOR_PALETTE = {'GaussianCopula':'#4cc9f0','CTGAN':'#f72585','TVAE':'#7209b7','TabDDPM':'#3a0ca3'}
 
-OUT = 'plots/paper'
+parser = argparse.ArgumentParser(description='Generate paper plots for bias2fair-synth.')
+parser.add_argument('--dataset', type=str, default='compas',
+                    choices=['compas', 'adult', 'diabetes'],
+                    help='Dataset to plot (default: compas)')
+args = parser.parse_args()
+DATASET = args.dataset
+
+OUT = os.path.join('plots', DATASET, 'paper')
 os.makedirs(OUT, exist_ok=True)
 
 def save(fig, name):
@@ -24,7 +32,7 @@ def save(fig, name):
     plt.close(fig)
     print(f'  saved {name}')
 
-df = pd.read_csv('outputs/compas_results.csv')
+df = pd.read_csv(f'outputs/{DATASET}_results.csv')
 
 # Map scenario labels
 def simplify_scenario(row):
@@ -274,8 +282,8 @@ for s_a, m_a, s_b, m_b, label in WILCOXON_COMPARISONS:
             })
 
 wil_df = pd.DataFrame(wil_results)
-os.makedirs('plots/metrics', exist_ok=True)
-wil_df.to_csv('plots/metrics/wilcoxon_full.csv', index=False)
+os.makedirs(os.path.join('plots', DATASET, 'metrics'), exist_ok=True)
+wil_df.to_csv(os.path.join('plots', DATASET, 'metrics', 'wilcoxon_full.csv'), index=False)
 print(f'  computed {len(wil_df)} Wilcoxon tests')
 
 # Short model labels
