@@ -79,3 +79,50 @@ Allows evaluating the synergistic or complementary effect between weight correct
 - Z-score normalization
 - Train/test split of 80/20
 - Fit / transform / only train dataset
+
+---
+
+## How to Run
+
+### 1. Running the Experiment Pipeline
+The main experiment script generates synthetic data, applies mitigators, trains models, and computes metrics. You can run it for one or multiple datasets sequentially:
+
+```bash
+# Run for a single dataset (e.g., adult)
+python scripts/run_experiment.py --dataset adult
+
+# Run for multiple datasets in sequence
+python scripts/run_experiment.py --dataset compas adult diabetes
+
+# To see all options
+python scripts/run_experiment.py --help
+```
+
+### 2. Generating Plots
+All plotting scripts support processing multiple datasets in a single execution. The plots are saved automatically under `plots/<dataset_name>/...`.
+
+**Paper Plots (Trade-offs & Fairness vs Utility)**
+```bash
+python scripts/plots/generate_paper_plots.py --dataset compas adult diabetes
+```
+
+**Data Analysis & Fairness Overlaps (Bhattacharyya)**
+```bash
+python scripts/plots/plot_data_analysis_fairness.py --dataset compas adult diabetes
+```
+
+**Individual Synthetic Fidelity (Distributions & Correlations)**
+```bash
+python scripts/plots/plot_individual_synthetic_fidelity.py --dataset compas adult diabetes
+```
+
+**Utility Metrics (ROC, PR Curves & Accuracy Trends)**
+```bash
+python scripts/plots/plot_utility_metrics.py --dataset compas adult diabetes
+```
+
+**SDV Fidelity Heatmaps & KDE Overlays (JSD Analysis)**
+```bash
+# You can also specify the reference scenario for the JSD evaluation
+python scripts/plots/plot_sdv_fidelity.py --dataset compas adult diabetes --scenario S3_2.0
+```
