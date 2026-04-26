@@ -153,23 +153,6 @@ ax.set_title('Distribuição de SPD por Cenário (10 seeds)', fontsize=13, fontw
 ax.legend(fontsize=9)
 save(fig, 'plot3_1_violin_spd_by_scenario.png')
 
-# ── PLOT 3.2: Heatmap Scenario x Model ───────────────────────────────────────
-print('Plot 3.2 – Heatmap scenario × model')
-pivot_di = df.groupby(['scenario_label','model'])['disparate_impact'].mean().unstack()
-pivot_f1 = df.groupby(['scenario_label','model'])['f1'].mean().unstack()
-fig, axes = plt.subplots(1, 2, figsize=(13, 6))
-for ax, pivot, title, cmap, center in [
-    (axes[0], pivot_di, 'Disparate Impact Médio', 'RdYlGn_r', 1.0),
-    (axes[1], pivot_f1, 'F1-Score Médio', 'YlGn', None),
-]:
-    idx = [i for i in present if i in pivot.index]
-    sns.heatmap(pivot.loc[idx], annot=True, fmt='.3f', cmap=cmap,
-                center=center, ax=ax, linewidths=0.5, annot_kws={'size':8})
-    ax.set_title(title, fontweight='bold')
-    ax.set_xlabel('')
-    ax.set_ylabel('')
-save(fig, 'plot3_2_heatmap_scenario_model.png')
-
 # ── PLOT 4.1: Line augmentation ratio ────────────────────────────────────────
 print('Plot 4.1 – Augmentation ratio')
 s3 = df[df['scenario'].isin(['S3_1.5','S3_2.0','S3_3.0'])].copy()
