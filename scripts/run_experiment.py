@@ -4,8 +4,30 @@ warnings.filterwarnings('ignore')
 import argparse
 import os
 import sys
+import shutil
+import datetime
 import pandas as pd
 import numpy as np
+
+# Override print to also log to experiment.log
+import builtins
+_original_print = builtins.print
+
+def _logged_print(*args, **kwargs):
+    _original_print(*args, **kwargs)
+    # Only log if writing to stdout (default)
+    if kwargs.get('file') in (None, sys.stdout):
+        sep = kwargs.get('sep', ' ')
+        msg = sep.join(map(str, args))
+        try:
+            with open('experiment.log', 'a', encoding='utf-8') as f:
+                ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                f.write(f"[{ts}] {msg}\n")
+        except Exception:
+            pass
+
+builtins.print = _logged_print
+
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
@@ -411,9 +433,14 @@ def run_for_dataset(dataset_name: str) -> None:
                             processed.add((scenario, mitigator, gen, seed))
                             pd.DataFrame(all_results).to_csv(csv_path, index=False)
                         except Exception as e:
-                            tqdm.write(
-                                f'  ⚠ Error [{scenario}/{mitigator}/{gen}/seed={seed}]: {e}'
-                            )
+                            err_msg = f'  ⚠ Error [{scenario}/{mitigator}/{gen}/seed={seed}]: {e}'
+                            tqdm.write(err_msg)
+                            try:
+                                with open('experiment.log', 'a', encoding='utf-8') as f:
+                                    ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    f.write(f"[{ts}] {err_msg}\n")
+                            except Exception:
+                                pass
                         pbar.update(1)
 
     # ── Summary ────────────────────────────────────────────────────────────
@@ -449,7 +476,23 @@ def main():
             '  --dataset compas adult diabetes'
         )
     )
+    parser.add_argument(
+        '--clear', action='store_true',
+        help='Clear previous results in outputs/ and plots/ (starts experiment from zero)'
+    )
     args = parser.parse_args()
+
+    if args.clear:
+        if os.path.exists('outputs'):
+            shutil.rmtree('outputs', ignore_errors=True)
+        if os.path.exists('plots'):
+            shutil.rmtree('plots', ignore_errors=True)
+        if os.path.exists('experiment.log'):
+            try:
+                os.remove('experiment.log')
+            except OSError:
+                pass
+        print("- Cleared previous results and logs. Starting fresh...")
 
     datasets = [d.lower() for d in args.dataset]
     # deduplicate while preserving order

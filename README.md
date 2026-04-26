@@ -85,7 +85,11 @@ Allows evaluating the synergistic or complementary effect between weight correct
 ## How to Run
 
 ### 1. Running the Experiment Pipeline
-The main experiment script generates synthetic data, applies mitigators, trains models, and computes metrics. You can run it for one or multiple datasets sequentially:
+The main experiment script generates synthetic data, applies mitigators, trains models, and computes metrics. You can run it for one or multiple datasets sequentially.
+
+**Note on Logging & Execution:**
+- All experiment outputs and terminal logs are automatically saved to `experiment.log`.
+- To start a completely fresh run and wipe all existing results, use the `--clear` flag. This safely deletes the `outputs/` and `plots/` directories, and resets `experiment.log`.
 
 ```bash
 # Run for a single dataset (e.g., adult)
@@ -93,6 +97,9 @@ python scripts/run_experiment.py --dataset adult
 
 # Run for multiple datasets in sequence
 python scripts/run_experiment.py --dataset compas adult diabetes
+
+# Clear previous results and logs (start completely from scratch)
+python scripts/run_experiment.py --dataset compas --clear
 
 # To see all options
 python scripts/run_experiment.py --help
