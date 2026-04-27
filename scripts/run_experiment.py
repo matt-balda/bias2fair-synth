@@ -1,5 +1,15 @@
 import warnings
-warnings.filterwarnings('ignore')
+import logging
+
+# Configure root logger to output to experiment_errors_warnings.log
+logging.basicConfig(
+    filename='experiment_errors_warnings.log',
+    level=logging.WARNING,
+    format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logging.captureWarnings(True)
+warnings.simplefilter('default')
 
 import argparse
 import os
@@ -42,11 +52,9 @@ from sdv.single_table import GaussianCopulaSynthesizer, CTGANSynthesizer, TVAESy
 from sdv.metadata import SingleTableMetadata
 from sdv.sampling import Condition
 from tqdm import tqdm
-import logging
 
-# Silence everything
-logging.disable(logging.CRITICAL)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# Allow tensorflow warnings and errors
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 from utils.data_loader import load_dataset, DATASET_CONFIGS
 from utils.metrics import calculate_metrics
@@ -341,7 +349,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
             pbar.set_postfix_str(f'{model_name}', refresh=True)
 
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
+            warnings.simplefilter('default')
             if weights is not None:
                 model.fit(X_train_scaled, y_train, sample_weight=weights)
             else:
@@ -461,12 +469,7 @@ def run_for_dataset(dataset_name: str) -> None:
                         except Exception as e:
                             err_msg = f'  ⚠ Error [{scenario}/{mitigator}/{gen}/seed={seed}]: {e}'
                             tqdm.write(err_msg)
-                            try:
-                                with open('experiment.log', 'a', encoding='utf-8') as f:
-                                    ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                    f.write(f"[{ts}] {err_msg}\n")
-                            except Exception:
-                                pass
+                            logging.error(err_msg, exc_info=True)
                         pbar.update(1)
 
     # ── Summary ────────────────────────────────────────────────────────────
@@ -516,6 +519,11 @@ def main():
         if os.path.exists('experiment.log'):
             try:
                 os.remove('experiment.log')
+            except OSError:
+                pass
+        if os.path.exists('experiment_errors_warnings.log'):
+            try:
+                os.remove('experiment_errors_warnings.log')
             except OSError:
                 pass
         print("- Cleared previous results and logs. Starting fresh...")
