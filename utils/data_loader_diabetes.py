@@ -95,11 +95,11 @@ def load_diabetes(path: str = _CACHE_PATH) -> pd.DataFrame:
 
     # ── Lab result ordinals ───────────────────────────────────────────────────
     if 'max_glu_serum' in df.columns:
-        df['max_glu_serum'] = df['max_glu_serum'].map(
+        df['max_glu_serum'] = df['max_glu_serum'].fillna('None').map(
             {'None': 0, 'Norm': 1, '>200': 2, '>300': 3}
         )
     if 'A1Cresult' in df.columns:
-        df['A1Cresult'] = df['A1Cresult'].map(
+        df['A1Cresult'] = df['A1Cresult'].fillna('None').map(
             {'None': 0, 'Norm': 1, '>7': 2, '>8': 3}
         )
 
