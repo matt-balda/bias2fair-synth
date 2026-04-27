@@ -3,9 +3,9 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
-from utils.tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
-from utils.tab_ddpm.modules import MLPDiffusion
-from utils.tab_ddpm.utils import index_to_log_onehot
+from models.tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
+from models.tab_ddpm.modules import MLPDiffusion
+from models.tab_ddpm.utils import index_to_log_onehot
 
 class TabDDPMWrapper:
     def __init__(self, metadata, device='cuda', steps=1000, batch_size=4096):

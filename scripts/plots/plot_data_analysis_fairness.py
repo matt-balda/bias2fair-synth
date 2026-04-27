@@ -124,7 +124,7 @@ def run_for_dataset(dataset_name: str) -> None:
     ax1.axvline(mean_overlap, color=TEAL, ls=':', lw=2, label=f'Média = {mean_overlap:.3f}')
     ax1.set_xlim(0, 1.05)
     ax1.set_xlabel('Bhattacharyya Overlap Coefficient', color=SUBTEXT, fontsize=11)
-    ax1.set_title('Sobreposição de Distribuição por Feature\n(African-American vs Caucasian)', fontsize=14, color=TEXT, fontweight='bold', pad=15)
+    ax1.set_title(f'Sobreposição de Distribuição por Feature\n(Grupo 0 vs Grupo 1 - {SENSITIVE})', fontsize=14, color=TEXT, fontweight='bold', pad=15)
     ax1.legend(fontsize=10, loc='lower right')
     ax1.grid(axis='x', alpha=0.3)
     for i, (v, col) in enumerate(zip(vals_s, colors1)):
@@ -146,7 +146,7 @@ def run_for_dataset(dataset_name: str) -> None:
 
     fig2 = plt.figure(figsize=(10, 8), facecolor=BG)
     ax2 = fig2.add_subplot(111)
-    for grp, color, lbl in [(0, C0, 'African-American'), (1, C1, 'Caucasian')]:
+    for grp, color, lbl in [(0, C0, 'Grupo 0 (Desprivilegiado)'), (1, C1, 'Grupo 1 (Privilegiado)')]:
         mask = s == grp
         ax2.scatter(X_pca[mask, 0], X_pca[mask, 1], c=color, alpha=0.3, s=15, edgecolors='none', label=lbl)
         try:
@@ -219,10 +219,10 @@ def run_for_dataset(dataset_name: str) -> None:
     # A - Target
     ax4a = fig4.add_subplot(gs[0])
     class_counts = pd.Series(y).value_counts().sort_index()
-    bars_t = ax4a.bar(['Não reincidiu (0)', 'Reincidiu (1)'], [class_counts[0], class_counts[1]], color=[TEAL, C1], width=0.5, edgecolor=GRID, lw=1.2)
-    for bar, v in zip(bars_t, [class_counts[0], class_counts[1]]):
+    bars_t = ax4a.bar(['Classe 0 (-)', 'Classe 1 (+)'], [class_counts.get(0, 0), class_counts.get(1, 0)], color=[TEAL, C1], width=0.5, edgecolor=GRID, lw=1.2)
+    for bar, v in zip(bars_t, [class_counts.get(0, 0), class_counts.get(1, 0)]):
         ax4a.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 50, f'{v}\n({v/N*100:.1f}%)', ha='center', va='bottom', fontsize=11, color=TEXT, fontweight='bold')
-    ax4a.set_title('A: Distribuição do Target\n(Reincidência)', fontsize=13, color=TEXT, fontweight='bold', pad=12)
+    ax4a.set_title(f'A: Distribuição do Target\n({TARGET})', fontsize=13, color=TEXT, fontweight='bold', pad=12)
     ax4a.set_ylabel('Amostras', color=SUBTEXT)
     ax4a.set_ylim(0, max(class_counts)*1.25)
     ax4a.axhline(N/2, color=GOLD, ls='--', lw=1.5, alpha=0.7, label='50%')
@@ -232,10 +232,10 @@ def run_for_dataset(dataset_name: str) -> None:
     # B - Sensitive
     ax4b = fig4.add_subplot(gs[1])
     group_counts = pd.Series(s).value_counts().sort_index()
-    bars_s = ax4b.bar(['African-Am (0)', 'Caucasian (1)'], [group_counts[0], group_counts[1]], color=[C0, TEAL], width=0.5, edgecolor=GRID, lw=1.2)
-    for bar, v in zip(bars_s, [group_counts[0], group_counts[1]]):
+    bars_s = ax4b.bar(['Grupo 0', 'Grupo 1'], [group_counts.get(0, 0), group_counts.get(1, 0)], color=[C0, TEAL], width=0.5, edgecolor=GRID, lw=1.2)
+    for bar, v in zip(bars_s, [group_counts.get(0, 0), group_counts.get(1, 0)]):
         ax4b.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 50, f'{v}\n({v/N*100:.1f}%)', ha='center', va='bottom', fontsize=11, color=TEXT, fontweight='bold')
-    ax4b.set_title('B: Distribuição do Atributo Sensível\n(Raça)', fontsize=13, color=TEXT, fontweight='bold', pad=12)
+    ax4b.set_title(f'B: Distribuição do Atributo Sensível\n({SENSITIVE})', fontsize=13, color=TEXT, fontweight='bold', pad=12)
     ax4b.set_ylabel('Amostras', color=SUBTEXT)
     ax4b.set_ylim(0, max(group_counts)*1.25)
     ax4b.grid(axis='y', alpha=0.3)
@@ -245,8 +245,8 @@ def run_for_dataset(dataset_name: str) -> None:
     cross = pd.crosstab(s, y)
     matrix = cross.values
     im = ax4c.imshow(matrix, cmap='YlOrRd', aspect='auto')
-    ax4c.set_xticks([0, 1]); ax4c.set_xticklabels(['Não reincidiu', 'Reincidiu'], color=TEXT)
-    ax4c.set_yticks([0, 1]); ax4c.set_yticklabels(['African-Am', 'Caucasian'], color=TEXT)
+    ax4c.set_xticks([0, 1]); ax4c.set_xticklabels(['Classe 0 (-)', 'Classe 1 (+)'], color=TEXT)
+    ax4c.set_yticks([0, 1]); ax4c.set_yticklabels(['Grupo 0', 'Grupo 1'], color=TEXT)
     for i in range(2):
         for j in range(2):
             val = matrix[i, j]

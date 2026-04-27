@@ -174,6 +174,16 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
     if scenario.startswith('S3') or scenario in ['S4', 'S5', 'S6']:
         metadata = SingleTableMetadata()
         metadata.detect_from_dataframe(train)
+
+        # Fix misidentified PIIs (e.g. SDV thinking 'workclass_State-gov' is a US State)
+        for col in list(metadata.columns.keys()):
+            meta = metadata.columns[col]
+            if meta['sdtype'] not in ['numerical', 'categorical', 'boolean', 'datetime']:
+                if pd.api.types.is_numeric_dtype(train[col]):
+                    metadata.update_column(column_name=col, sdtype='numerical')
+                else:
+                    metadata.update_column(column_name=col, sdtype='categorical')
+
         gen = build_generator(generator_name, metadata)
 
         if scenario.startswith('S3'):  # Full Augmentation (alpha)
@@ -193,7 +203,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < max_count:
-                    n_to_generate = max_count - count
+                    n_to_generate = int(max_count - count)
                     if hasattr(gen, 'sample_from_conditions'):
                         cond = Condition(
                             num_rows=n_to_generate,
@@ -219,7 +229,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < n_ideal:
-                    n_to_generate = n_ideal - count
+                    n_to_generate = int(n_ideal - count)
                     if hasattr(gen, 'sample_from_conditions'):
                         cond = Condition(
                             num_rows=n_to_generate,
@@ -250,7 +260,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
             synths = []
             for (sens_val, targ_val), count in group_counts.items():
                 if count < n_ideal:
-                    n_to_generate = n_ideal - count
+                    n_to_generate = int(n_ideal - count)
                     if hasattr(gen, 'sample_from_conditions'):
                         cond = Condition(
                             num_rows=n_to_generate,
@@ -294,7 +304,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
         if mitigator_name == 'DIRemover':
             bld_test = BinaryLabelDataset(df=test, label_names=[target],
                                           protected_attribute_names=[sensitive])
-            test_repaired = dir_remover.transform(bld_test)
+            test_repaired = dir_remover.fit_transform(bld_test)
             test_repaired_df, _ = test_repaired.convert_to_dataframe()
             for col in test.columns:
                 if col in test_repaired_df.columns:
@@ -373,6 +383,10 @@ def run_for_dataset(dataset_name: str) -> None:
 
     data = cfg['loader']()
 
+    # Pre-experiment limit: 2000 rows
+    if len(data) > 2000:
+        data = data.sample(n=2000, random_state=42).reset_index(drop=True)
+
     print(f'\n  ✔ Dataset loaded : {data.shape[0]} records × {data.shape[1]} features')
     print(f'  ✔ Target         : {TARGET}  |  {dict(data[TARGET].value_counts().items())}')
     print(f'  ✔ Sensitive      : {SENSITIVE}  |  '
@@ -392,6 +406,8 @@ def run_for_dataset(dataset_name: str) -> None:
         df_old = pd.read_csv(csv_path)
         for _, row in df_old.iterrows():
             mit = row.get('mitigator', 'None')
+            if pd.isna(mit):
+                mit = 'None'
             processed.add((row['scenario'], mit, row['generator'], int(row['seed'])))
         all_results = df_old.to_dict('records')
 
