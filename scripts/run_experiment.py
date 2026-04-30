@@ -391,9 +391,9 @@ def run_for_dataset(dataset_name: str) -> None:
 
     data = cfg['loader']()
 
-    # Pre-experiment limit: 2000 rows
-    if len(data) > 2000:
-        data = data.sample(n=2000, random_state=42).reset_index(drop=True)
+    # Apply limits for specific datasets
+    if dataset_name in ['adult', 'diabetes'] and len(data) > 10000:
+        data = data.sample(n=10000, random_state=42).reset_index(drop=True)
 
     print(f'\n  ✔ Dataset loaded : {data.shape[0]} records × {data.shape[1]} features')
     print(f'  ✔ Target         : {TARGET}  |  {dict(data[TARGET].value_counts().items())}')

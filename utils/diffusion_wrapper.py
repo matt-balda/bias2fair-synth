@@ -28,10 +28,16 @@ class TabDDPMWrapper:
         self.num_is_int = {}
         
     def _preprocess(self, df):
-        # Identify numerical and categorical based on metadata or types
-        # For COMPAS, we know the types
-        self.cat_cols = [col for col in df.columns if df[col].dtype == 'object' or col in ['sex', 'race', 'c_charge_degree', 'two_year_recid'] or str(col).startswith('age_cat_')]
-        self.num_cols = [col for col in df.columns if col not in self.cat_cols]
+        # Identify numerical and categorical based on SDV metadata
+        self.cat_cols = []
+        self.num_cols = []
+        for col in df.columns:
+            # Fallback for columns not in metadata (should not happen)
+            sdtype = self.metadata.columns.get(col, {}).get('sdtype', 'numerical')
+            if sdtype in ['categorical', 'boolean']:
+                self.cat_cols.append(col)
+            else:
+                self.num_cols.append(col)
         
         # Track limits
         for col in self.num_cols:
