@@ -68,7 +68,7 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None
     tpr_unpriv = y_pred_array[y1_unpriv_mask].mean() if y1_unpriv_mask.sum() > 0 else 0.0
     
     metrics['equal_opportunity_difference'] = tpr_unpriv - tpr_priv
-    
+
     metrics['average_absolute_odds_difference'] = equalized_odds_difference(
         y_true, y_pred, sensitive_features=sensitive_features
     )

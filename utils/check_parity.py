@@ -1,5 +1,5 @@
 import pandas as pd
-from data_loader import load_compas
+from utils.data_loader import load_compas
 
 def check_demographic_parity(df, target_col='two_year_recid', sensitive_col='race', priv_val=1, unpriv_val=0):
     """Calculates and displays demographic parity metrics for a given dataset."""
