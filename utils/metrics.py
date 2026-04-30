@@ -29,7 +29,7 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None
     metrics = {}
     
     # Performance
-    metrics['f1'] = f1_score(y_true, y_pred)
+    metrics['f1'] = f1_score(y_true, y_pred, average='binary')
     metrics['auc_roc'] = roc_auc_score(y_true, y_prob)
     metrics['auc_pr'] = average_precision_score(y_true, y_prob)
     metrics['recall'] = recall_score(y_true, y_pred)
@@ -37,7 +37,7 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None
     metrics['accuracy'] = accuracy_score(y_true, y_pred)
     
     # Fairness (Signed metrics: Unprivileged - Privileged)
-    # 0 = Unprivileged (African-American), 1 = Privileged (Caucasian)
+    # Convention: 0 = unprivileged group, 1 = privileged group (dataset-specific).
     if isinstance(sensitive_features, pd.Series):
         sensitive_array = sensitive_features.values
     else:
@@ -49,11 +49,16 @@ def calculate_metrics(y_true, y_pred, y_prob, sensitive_features, save_path=None
     y_pred_array = np.array(y_pred)
     y_true_array = np.array(y_true)
     
-    pr_priv = y_pred_array[priv_mask].mean() if priv_mask.sum() > 0 else 0.0
-    pr_unpriv = y_pred_array[unpriv_mask].mean() if unpriv_mask.sum() > 0 else 0.0
+    pr_priv   = y_pred_array[priv_mask].mean()   if priv_mask.sum()   > 0 else np.nan
+    pr_unpriv = y_pred_array[unpriv_mask].mean() if unpriv_mask.sum() > 0 else np.nan
     
     metrics['statistical_parity_difference'] = pr_unpriv - pr_priv
-    metrics['disparate_impact'] = pr_unpriv / pr_priv if pr_priv > 0 else np.nan
+    if pr_priv == 0 and pr_unpriv == 0:
+        metrics['disparate_impact'] = 1.0  # both groups predict no positives — perfect parity
+    elif pr_priv == 0 or np.isnan(pr_priv) or np.isnan(pr_unpriv):
+        metrics['disparate_impact'] = np.nan
+    else:
+        metrics['disparate_impact'] = pr_unpriv / pr_priv
     
     # TPR for Equal Opportunity on target class 1
     y1_priv_mask = priv_mask & (y_true_array == 1)

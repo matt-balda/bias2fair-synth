@@ -116,7 +116,8 @@ class TabDDPMWrapper:
                 optimizer.step()
             
             if epoch % 20 == 0:
-                print(f"Epoch {epoch} | Loss: {loss.item():.4f}")
+                import logging
+                logging.getLogger(__name__).debug("Epoch %d | Loss: %.4f", epoch, loss.item())
 
     def sample(self, num_rows):
         self.model.eval()
@@ -172,6 +173,9 @@ class TabDDPMWrapper:
                 if self.num_is_int[col]:
                     df_num[col] = df_num[col].round().astype(int)
 
-            df_cat = pd.DataFrame(np.stack(res_cat_labels, axis=1), columns=self.cat_cols)
+            df_cat = (
+                pd.DataFrame(np.stack(res_cat_labels, axis=1), columns=self.cat_cols)
+                if self.cat_cols else pd.DataFrame(index=range(num_rows))
+            )
             df_final = pd.concat([df_num, df_cat], axis=1)
             return df_final[self.original_columns]

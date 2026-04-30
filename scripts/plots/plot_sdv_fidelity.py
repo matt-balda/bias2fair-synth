@@ -239,10 +239,18 @@ def run_for_dataset(dataset_name: str, scenario: str) -> None:
     print(f'  Dataset: {dataset_name.upper()}')
     print('═' * 65 + '\n')
 
-    cfg     = DATASET_CONFIGS[dataset_name]
-    real_df = cfg['loader']()
-    target  = cfg['target']
+    cfg       = DATASET_CONFIGS[dataset_name]
+    real_df   = cfg['loader']()
+    target    = cfg['target']
     sensitive = cfg['sensitive']
+
+    # Apply the same 10k stratified cut used during the experiment,
+    # so JSD is computed against the same distribution the generators trained on.
+    if dataset_name in ['adult', 'diabetes'] and len(real_df) > 10000:
+        from sklearn.model_selection import train_test_split as _tts
+        strat = real_df[target].astype(str) + '_' + real_df[sensitive].astype(str)
+        _, real_df = _tts(real_df, test_size=10000, random_state=42, stratify=strat)
+        real_df = real_df.reset_index(drop=True)
 
     print(f'  Real data  : {len(real_df)} rows × {real_df.shape[1]} cols')
     print(f'  Scenario   : {scenario}')

@@ -135,7 +135,9 @@ def run_for_dataset(dataset_name: str) -> None:
     ax.set_xlabel('Disparate Impact (DI) →  Fairness', fontsize=11)
     ax.set_ylabel('F1-Score →  Utilidade', fontsize=11)
     ax.set_title(f'Trade-off Fairness × Utilidade — {dataset_name.upper()}', fontsize=13, fontweight='bold')
-    ax.set_xlim(0.5, 5.5)
+    di_min = max(0.0, means_full['disparate_impact'].min() - 0.1)
+    di_max = means_full['disparate_impact'].max() + 0.15
+    ax.set_xlim(di_min, di_max)
     save(fig, 'plot2_1_pareto_scatter.png')
 
     # ── PLOT 2.2: F1 vs SPD ───────────────────────────────────────────────

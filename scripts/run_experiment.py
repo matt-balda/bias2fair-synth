@@ -140,7 +140,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
     # ── Step 1: Stratified split ───────────────────────────────────────────
     train, test = train_test_split(
         data, test_size=0.2, random_state=seed,
-        stratify=data[[target, sensitive]]
+        stratify=data[target].astype(str) + '_' + data[sensitive].astype(str)
     )
     train = train.copy()
     test  = test.copy()
@@ -152,7 +152,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
     # ── Step 2: Bias Mitigation (S2 and S6) ───────────────────────────────
     if scenario in ['S2', 'S6']:
         if mitigator_name == 'Reweighing':
-            X_rw = train.drop(columns=[target]).set_index(sensitive, drop=False)
+            X_rw = train.drop(columns=[target]).set_index(sensitive, drop=True)
             y_rw = train[target]
             rw = Reweighing(prot_attr=sensitive)
             _, w = rw.fit_transform(X_rw, y_rw)
@@ -331,9 +331,7 @@ def run_single(scenario, generator_name, mitigator_name, seed, data,
     y_test  = test[target]
 
     # Z-score normalisation — fit only on train
-    num_cols = X_train.select_dtypes(
-        include=['int64', 'int32', 'float64', 'float32', 'uint8']
-    ).columns
+    num_cols = X_train.select_dtypes(include='number').columns
     scaler = StandardScaler()
     X_train_scaled = X_train.copy()
     X_test_scaled  = X_test.copy()
@@ -391,9 +389,17 @@ def run_for_dataset(dataset_name: str) -> None:
 
     data = cfg['loader']()
 
-    # Apply limits for specific datasets
+    # Apply limits for specific datasets — stratified by TARGET × SENSITIVE
+    # to preserve the joint distribution of both key variables.
     if dataset_name in ['adult', 'diabetes'] and len(data) > 10000:
-        data = data.sample(n=10000, random_state=42).reset_index(drop=True)
+        strat_col = data[TARGET].astype(str) + '_' + data[SENSITIVE].astype(str)
+        _, data = train_test_split(
+            data,
+            test_size=10000,
+            random_state=42,
+            stratify=strat_col,
+        )
+        data = data.reset_index(drop=True)
 
     print(f'\n  ✔ Dataset loaded : {data.shape[0]} records × {data.shape[1]} features')
     print(f'  ✔ Target         : {TARGET}  |  {dict(data[TARGET].value_counts().items())}')

@@ -203,7 +203,8 @@ def plot_pr_curve(seed=42, model='CatBoost', dataset_name='compas'):
         return
 
     colors = sns.color_palette('tab10', len(preds))
-    base_rate = 0.5
+    # Compute base_rate from first available prediction file (class prevalence).
+    base_rate = next(iter(preds.values()))['y_true'].mean()
     fig, ax = plt.subplots(figsize=(9, 8))
 
     for (label, df_pred), color in zip(preds.items(), colors):
@@ -211,8 +212,6 @@ def plot_pr_curve(seed=42, model='CatBoost', dataset_name='compas'):
         pr_auc = average_precision_score(df_pred['y_true'], df_pred['y_prob'])
         ax.plot(recall, precision, color=color, lw=2,
                 label=f'{label} (AUC-PR={pr_auc:.3f})')
-        if label.startswith('S1'):
-            base_rate = df_pred['y_true'].mean()
 
     ax.plot([0, 1], [base_rate, base_rate], color='black', lw=1.5, linestyle='--',
             label=f'Random (AUC-PR={base_rate:.3f})')

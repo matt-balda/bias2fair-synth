@@ -1,5 +1,5 @@
 """
-generate_plots.py:
+plot_individual_synthetic_fidelity.py:
 
   - Real vs Synthetic distributions per feature
   - Correlation heatmaps (Real, Synthetic, Difference)
@@ -101,7 +101,7 @@ def plot_correlations(real_df, base):
     if not os.path.exists(synth_root):
         return
 
-    real_corr = real_df.corr(numeric_only=True)
+    real_corr = real_df.select_dtypes('number').corr()
 
     for scenario in tqdm(sorted(os.listdir(synth_root)), desc='  Correlations', leave=False):
         sc_path = os.path.join(synth_root, scenario)
@@ -113,7 +113,7 @@ def plot_correlations(real_df, base):
 
             synth_dfs  = [pd.read_csv(os.path.join(gen_path, f)) for f in csvs]
             synth      = pd.concat(synth_dfs, ignore_index=True)
-            synth_corr = synth.corr(numeric_only=True)
+            synth_corr = synth.select_dtypes('number').corr()
             diff_corr  = (real_corr - synth_corr).abs()
 
             out = makedirs(base, 'correlation', DATASET, scenario, generator)
