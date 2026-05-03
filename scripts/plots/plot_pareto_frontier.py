@@ -222,11 +222,6 @@ def plot_pareto_single(ax, means_full: pd.DataFrame,
     # ── 6. Axes cosmetics ─────────────────────────────────────────────────
     ax.set_xlabel(xlabel, fontsize=10)
     ax.set_ylabel('F1-Score  →  Utility', fontsize=10)
-    ax.set_title(
-        f'Pareto Frontier: F1 × {xlabel.split("(")[0].strip()}\n'
-        f'{dataset_name.upper()}',
-        fontsize=11, fontweight='bold',
-    )
     ax.grid(alpha=0.25, lw=0.6)
     ax.spines[['top', 'right']].set_visible(False)
 
@@ -309,17 +304,13 @@ def run_for_dataset(dataset_name: str) -> None:
         fname = METRIC_FNAMES[metric_col]
         fpath = os.path.join(out, fname)
         fig.savefig(fpath, dpi=200, bbox_inches='tight')
+        fig.savefig(fpath.replace('.png', '.eps'), format='eps', bbox_inches='tight')
         plt.close(fig)
-        print(f'  saved → {fpath}')
+        print(f'  saved → {fpath} and .eps')
 
     # ── 2×2 Dashboard ─────────────────────────────────────────────────────
     print('  Generating 2×2 dashboard...')
     fig, axes = plt.subplots(2, 2, figsize=(16, 11))
-    fig.suptitle(
-        f'Pareto Frontiers: Utility × Fairness — {dataset_name.upper()}\n'
-        '(★ = Pareto-optimal;  shaded = non-dominated region)',
-        fontsize=14, fontweight='bold', y=1.01,
-    )
 
     for ax, (metric_col, xlabel, ideal, ideal_label) in zip(axes.flat, METRICS):
         plot_pareto_single(ax, means_full, metric_col, xlabel,
@@ -346,8 +337,9 @@ def run_for_dataset(dataset_name: str) -> None:
     fig.tight_layout()
     dash_path = os.path.join(out, 'plot_pareto_dashboard.png')
     fig.savefig(dash_path, dpi=200, bbox_inches='tight')
+    fig.savefig(dash_path.replace('.png', '.eps'), format='eps', bbox_inches='tight')
     plt.close(fig)
-    print(f'  saved → {dash_path}')
+    print(f'  saved → {dash_path} and .eps')
 
     print(f'\n  ✔ Done! All Pareto plots saved to {out}/\n')
 

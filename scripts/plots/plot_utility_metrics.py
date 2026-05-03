@@ -51,8 +51,9 @@ def save_fig(fig, filename, dpi=300):
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, filename)
     fig.savefig(path, dpi=dpi, bbox_inches='tight')
+    fig.savefig(path.replace('.png', '.eps'), format='eps', bbox_inches='tight')
     plt.close(fig)
-    print(f'  saved → {path}')
+    print(f'  saved → {path} and .eps')
 
 
 def load_results(dataset_name: str):
@@ -84,10 +85,9 @@ def _line_plot(df, y_col, title, ylabel, filename, ylim_pad=0.01):
         palette='Dark2',
     )
     ax.set_ylim(y_min - pad, y_max + pad)
-    ax.set_title(title, fontsize=16, fontweight='bold', pad=15)
-    ax.set_xlabel('Cenários Experimentais', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Experimental Scenarios', fontsize=13, fontweight='bold')
     ax.set_ylabel(ylabel, fontsize=13, fontweight='bold')
-    ax.legend(title='Modelo', bbox_to_anchor=(1.02, 1), loc='upper left',
+    ax.legend(title='Model', bbox_to_anchor=(1.02, 1), loc='upper left',
               frameon=True, shadow=True)
     sns.despine()
     fig.tight_layout()
@@ -98,14 +98,14 @@ def plot_accuracy_lines(df):
     print('Plotting accuracy lines...')
     _line_plot(df, 'accuracy',
                'Impacto das Estratégias de Mitigação na Acurácia',
-               'Acurácia Média', 'accuracy_lines.png')
+               'Average Accuracy', 'accuracy_lines.png')
 
 
 def plot_auc_pr_lines(df):
     print('Plotting AUC-PR lines...')
     _line_plot(df, 'auc_pr',
                'Impacto das Estratégias de Mitigação na AUC-PR',
-               'AUC-PR Média', 'auc_pr_lines.png')
+               'Average AUC-PR', 'auc_pr_lines.png')
 
 
 def plot_precision_recall_lines(df):
@@ -113,8 +113,8 @@ def plot_precision_recall_lines(df):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     for ax, y_col, title, ylabel in [
-        (axes[0], 'recall',    'Evolução do Recall',    'Recall Médio'),
-        (axes[1], 'precision', 'Evolução da Precision', 'Precisão Média'),
+        (axes[0], 'recall',    'Evolução do Recall',    'Average Recall'),
+        (axes[1], 'precision', 'Evolução da Precision', 'Average Precision'),
     ]:
         agg = df.groupby('scenario_label', observed=True)[y_col].mean()
         y_min = np.floor(agg.min() * 100) / 100
@@ -133,14 +133,11 @@ def plot_precision_recall_lines(df):
             legend=show_legend,
         )
         ax.set_ylim(y_min - 0.02, y_max + 0.02)
-        ax.set_title(title, fontsize=15, fontweight='bold', pad=12)
-        ax.set_xlabel('Cenários Experimentais', fontsize=13, fontweight='bold')
+        ax.set_xlabel('Experimental Scenarios', fontsize=13, fontweight='bold')
         ax.set_ylabel(ylabel, fontsize=13, fontweight='bold')
 
-    axes[1].legend(title='Modelo', bbox_to_anchor=(1.02, 1), loc='upper left',
+    axes[1].legend(title='Model', bbox_to_anchor=(1.02, 1), loc='upper left',
                    frameon=True, shadow=True)
-    fig.suptitle('Análise Detalhada: Recall e Precision por Cenário',
-                 fontsize=17, fontweight='bold', y=1.02)
     sns.despine()
     fig.tight_layout()
     save_fig(fig, 'precision_recall_lines.png')
@@ -188,8 +185,6 @@ def plot_roc_curve(seed=42, model='CatBoost', dataset_name='compas'):
     ax.set_ylim([0.0, 1.05])
     ax.set_xlabel('False Positive Rate (FPR)', fontsize=12)
     ax.set_ylabel('True Positive Rate (TPR)', fontsize=12)
-    ax.set_title(f'ROC Curve — Cenários\n(Model: {model} | Seed: {seed})',
-                 fontsize=14, fontweight='bold')
     ax.legend(loc='lower right', fontsize=9)
     fig.tight_layout()
     save_fig(fig, 'roc_curve_traditional.png')
@@ -219,8 +214,6 @@ def plot_pr_curve(seed=42, model='CatBoost', dataset_name='compas'):
     ax.set_ylim([0.0, 1.05])
     ax.set_xlabel('Recall', fontsize=12)
     ax.set_ylabel('Precision', fontsize=12)
-    ax.set_title(f'Precision-Recall Curve — Cenários\n(Model: {model} | Seed: {seed})',
-                 fontsize=14, fontweight='bold')
     ax.legend(loc='lower left', fontsize=9)
     fig.tight_layout()
     save_fig(fig, 'pr_curve_traditional.png')

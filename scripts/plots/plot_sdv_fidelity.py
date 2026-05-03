@@ -150,16 +150,12 @@ def plot_heatmap_jsd(real_df: pd.DataFrame, col_labels: dict,
     ax.set_ylabel('Synthetic Generator', fontsize=12)
     ax.tick_params(axis='x', rotation=35, labelsize=10)
     ax.tick_params(axis='y', rotation=0,  labelsize=10)
-    ax.set_title(
-        f'Statistical Similarity: Real × Synthetic ({dataset_name.upper()}) — {scenario}\n'
-        f'Mean Jensen-Shannon Divergence per Generator × Feature',
-        fontsize=12, fontweight='bold', pad=14,
-    )
     fig.tight_layout()
     out = os.path.join(out_dir, 'plot_sdv_heatmap_jsd.png')
     fig.savefig(out, dpi=200, bbox_inches='tight')
+    fig.savefig(out.replace('.png', '.eps'), format='eps', bbox_inches='tight')
     plt.close(fig)
-    print(f'  saved → {out}')
+    print(f'  saved → {out} and .eps')
     return mean_jsd
 
 
@@ -214,17 +210,11 @@ def plot_kde_overlay(real_df: pd.DataFrame, gen: str, col_labels: dict,
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-    mean_jsd = np.nanmean(list(jsd_vals.values()))
-    fig.suptitle(
-        f'Distribution Overlay: Real vs Synthetic — {scenario}\n'
-        f'Best generator: {gen}  |  seed={CANONICAL_SEED}  |  Mean JSD = {mean_jsd:.3f}  '
-        f'(n_real = n_synth = {n_real})',
-        fontsize=12, fontweight='bold', y=1.02,
-    )
     out = os.path.join(out_dir, 'plot_sdv_kde_overlay.png')
     fig.savefig(out, dpi=200, bbox_inches='tight')
+    fig.savefig(out.replace('.png', '.eps'), format='eps', bbox_inches='tight')
     plt.close(fig)
-    print(f'  saved → {out}')
+    print(f'  saved → {out} and .eps')
 
 
 # ── Per-dataset runner ────────────────────────────────────────────────────────

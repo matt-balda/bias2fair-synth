@@ -120,17 +120,17 @@ def run_for_dataset(dataset_name: str) -> None:
     ax1.barh(range(len(cols_s)), vals_s, color=colors1, edgecolor=GRID, linewidth=0.8, height=0.65)
     ax1.set_yticks(range(len(cols_s)))
     ax1.set_yticklabels(cols_s, fontsize=10)
-    ax1.axvline(0.85, color=GOLD, ls='--', lw=2, label='Limiar 0.85')
-    ax1.axvline(mean_overlap, color=TEAL, ls=':', lw=2, label=f'Média = {mean_overlap:.3f}')
+    ax1.axvline(0.85, color=GOLD, ls='--', lw=2, label='Threshold 0.85')
+    ax1.axvline(mean_overlap, color=TEAL, ls=':', lw=2, label=f'Mean = {mean_overlap:.3f}')
     ax1.set_xlim(0, 1.05)
     ax1.set_xlabel('Bhattacharyya Overlap Coefficient', color=SUBTEXT, fontsize=11)
-    ax1.set_title(f'Sobreposição de Distribuição por Feature\n(Grupo 0 vs Grupo 1 - {SENSITIVE})', fontsize=14, color=TEXT, fontweight='bold', pad=15)
     ax1.legend(fontsize=10, loc='lower right')
     ax1.grid(axis='x', alpha=0.3)
     for i, (v, col) in enumerate(zip(vals_s, colors1)):
         ax1.text(v + 0.01, i, f'{v:.3f}', va='center', fontsize=9, color=col, fontweight='bold')
     out1 = os.path.join(out_dir, 'bhattacharyya_overlap.png')
     fig1.savefig(out1, dpi=200, bbox_inches='tight', facecolor=BG)
+    fig1.savefig(out1.replace('.png', '.eps'), format='eps', bbox_inches='tight', facecolor=BG)
     plt.close(fig1)
 
     # =========================================================================
@@ -146,7 +146,7 @@ def run_for_dataset(dataset_name: str) -> None:
 
     fig2 = plt.figure(figsize=(10, 8), facecolor=BG)
     ax2 = fig2.add_subplot(111)
-    for grp, color, lbl in [(0, C0, 'Grupo 0 (Desprivilegiado)'), (1, C1, 'Grupo 1 (Privilegiado)')]:
+    for grp, color, lbl in [(0, C0, 'Group 0 (Unprivileged)'), (1, C1, 'Group 1 (Privileged)')]:
         mask = s == grp
         ax2.scatter(X_pca[mask, 0], X_pca[mask, 1], c=color, alpha=0.3, s=15, edgecolors='none', label=lbl)
         try:
@@ -162,11 +162,11 @@ def run_for_dataset(dataset_name: str) -> None:
     ax2.text(mid[0], mid[1] + 0.4, f'd={centroid_dist:.3f}', ha='center', color=TEXT, fontsize=11, fontweight='bold')
     ax2.set_xlabel(f'PC1 ({var_exp[0]*100:.1f}%)', color=SUBTEXT, fontsize=11)
     ax2.set_ylabel(f'PC2 ({var_exp[1]*100:.1f}%)', color=SUBTEXT, fontsize=11)
-    ax2.set_title('PCA Biplot: Separação dos Grupos no Espaço de Features', fontsize=14, color=TEXT, fontweight='bold', pad=15)
     ax2.legend(fontsize=11)
     ax2.grid(alpha=0.2)
     out2 = os.path.join(out_dir, 'pca_2d.png')
     fig2.savefig(out2, dpi=200, bbox_inches='tight', facecolor=BG)
+    fig2.savefig(out2.replace('.png', '.eps'), format='eps', bbox_inches='tight', facecolor=BG)
     plt.close(fig2)
 
     # =========================================================================
@@ -197,16 +197,16 @@ def run_for_dataset(dataset_name: str) -> None:
     ax3.axvspan(ci_di[0], ci_di[1], alpha=0.18, color=GOLD, zorder=2, label=f'CI 95%: [{ci_di[0]:.3f}, {ci_di[1]:.3f}]')
     ax3.axvline(ci_di[0], color=GOLD, lw=1.5, ls=':', zorder=3)
     ax3.axvline(ci_di[1], color=GOLD, lw=1.5, ls=':', zorder=3)
-    ax3.axvline(1.0, color=GREEN, lw=2.0, ls='--', zorder=4, label='DI = 1 (equidade)')
-    ax3.axvline(obs_di, color=RED, lw=2.8, zorder=5, label=f'Observado = {obs_di:.4f}')
+    ax3.axvline(1.0, color=GREEN, lw=2.0, ls='--', zorder=4, label='DI = 1 (fairness)')
+    ax3.axvline(obs_di, color=RED, lw=2.8, zorder=5, label=f'Observed = {obs_di:.4f}')
 
     ax3.set_xlabel('Disparate Impact (DI)', color=SUBTEXT, fontsize=11)
-    ax3.set_ylabel('Densidade', color=SUBTEXT, fontsize=11)
-    ax3.set_title('Bootstrap CI — Disparate Impact', fontsize=14, color=TEXT, fontweight='bold', pad=15)
+    ax3.set_ylabel('Density', color=SUBTEXT, fontsize=11)
     ax3.legend(fontsize=10, loc='upper left')
     ax3.grid(alpha=0.3)
     out3 = os.path.join(out_dir, 'bootstrap_di.png')
     fig3.savefig(out3, dpi=200, bbox_inches='tight', facecolor=BG)
+    fig3.savefig(out3.replace('.png', '.eps'), format='eps', bbox_inches='tight', facecolor=BG)
     plt.close(fig3)
 
     # =========================================================================
@@ -219,11 +219,10 @@ def run_for_dataset(dataset_name: str) -> None:
     # A - Target
     ax4a = fig4.add_subplot(gs[0])
     class_counts = pd.Series(y).value_counts().sort_index()
-    bars_t = ax4a.bar(['Classe 0 (-)', 'Classe 1 (+)'], [class_counts.get(0, 0), class_counts.get(1, 0)], color=[TEAL, C1], width=0.5, edgecolor=GRID, lw=1.2)
+    bars_t = ax4a.bar(['Class 0 (-)', 'Class 1 (+)'], [class_counts.get(0, 0), class_counts.get(1, 0)], color=[TEAL, C1], width=0.5, edgecolor=GRID, lw=1.2)
     for bar, v in zip(bars_t, [class_counts.get(0, 0), class_counts.get(1, 0)]):
         ax4a.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 50, f'{v}\n({v/N*100:.1f}%)', ha='center', va='bottom', fontsize=11, color=TEXT, fontweight='bold')
-    ax4a.set_title(f'A: Distribuição do Target\n({TARGET})', fontsize=13, color=TEXT, fontweight='bold', pad=12)
-    ax4a.set_ylabel('Amostras', color=SUBTEXT)
+    ax4a.set_ylabel('Samples', color=SUBTEXT)
     ax4a.set_ylim(0, max(class_counts)*1.25)
     ax4a.axhline(N/2, color=GOLD, ls='--', lw=1.5, alpha=0.7, label='50%')
     ax4a.legend(loc='upper right', fontsize=10)
@@ -232,11 +231,10 @@ def run_for_dataset(dataset_name: str) -> None:
     # B - Sensitive
     ax4b = fig4.add_subplot(gs[1])
     group_counts = pd.Series(s).value_counts().sort_index()
-    bars_s = ax4b.bar(['Grupo 0', 'Grupo 1'], [group_counts.get(0, 0), group_counts.get(1, 0)], color=[C0, TEAL], width=0.5, edgecolor=GRID, lw=1.2)
+    bars_s = ax4b.bar(['Group 0', 'Group 1'], [group_counts.get(0, 0), group_counts.get(1, 0)], color=[C0, TEAL], width=0.5, edgecolor=GRID, lw=1.2)
     for bar, v in zip(bars_s, [group_counts.get(0, 0), group_counts.get(1, 0)]):
         ax4b.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 50, f'{v}\n({v/N*100:.1f}%)', ha='center', va='bottom', fontsize=11, color=TEXT, fontweight='bold')
-    ax4b.set_title(f'B: Distribuição do Atributo Sensível\n({SENSITIVE})', fontsize=13, color=TEXT, fontweight='bold', pad=12)
-    ax4b.set_ylabel('Amostras', color=SUBTEXT)
+    ax4b.set_ylabel('Samples', color=SUBTEXT)
     ax4b.set_ylim(0, max(group_counts)*1.25)
     ax4b.grid(axis='y', alpha=0.3)
 
@@ -245,19 +243,19 @@ def run_for_dataset(dataset_name: str) -> None:
     cross = pd.crosstab(s, y)
     matrix = cross.values
     im = ax4c.imshow(matrix, cmap='YlOrRd', aspect='auto')
-    ax4c.set_xticks([0, 1]); ax4c.set_xticklabels(['Classe 0 (-)', 'Classe 1 (+)'], color=TEXT)
-    ax4c.set_yticks([0, 1]); ax4c.set_yticklabels(['Grupo 0', 'Grupo 1'], color=TEXT)
+    ax4c.set_xticks([0, 1]); ax4c.set_xticklabels(['Class 0 (-)', 'Class 1 (+)'], color=TEXT)
+    ax4c.set_yticks([0, 1]); ax4c.set_yticklabels(['Group 0', 'Group 1'], color=TEXT)
     for i in range(2):
         for j in range(2):
             val = matrix[i, j]
             col_txt = 'black' if val > matrix.max() * 0.55 else TEXT
             ax4c.text(j, i, f'{val}\n({val/N*100:.1f}%)', ha='center', va='center', fontsize=13, color=col_txt, fontweight='bold')
-    ax4c.set_title('C: Target vs Sensível\n(Crosstab)', fontsize=13, color=TEXT, fontweight='bold', pad=12)
     plt.colorbar(im, ax=ax4c, pad=0.03)
 
     plt.tight_layout()
     out4 = os.path.join(out_dir, 'eda_groups.png')
     fig4.savefig(out4, dpi=200, bbox_inches='tight', facecolor=BG)
+    fig4.savefig(out4.replace('.png', '.eps'), format='eps', bbox_inches='tight', facecolor=BG)
     plt.close(fig4)
 
     print(f"Salvos em {out_dir}/")

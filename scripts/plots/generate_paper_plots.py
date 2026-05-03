@@ -62,8 +62,13 @@ def run_for_dataset(dataset_name: str) -> None:
     def save(fig, name):
         fig.tight_layout()
         fig.savefig(os.path.join(out, name), dpi=180, bbox_inches='tight')
+        
+        # Save EPS format
+        eps_name = name.replace('.png', '.eps')
+        fig.savefig(os.path.join(out, eps_name), format='eps', bbox_inches='tight')
+        
         plt.close(fig)
-        print(f'  saved {name}')
+        print(f'  saved {name} and {eps_name}')
 
     # ── Scenario label mapping ─────────────────────────────────────────────
     def simplify_scenario(row):
@@ -121,7 +126,7 @@ def run_for_dataset(dataset_name: str) -> None:
     # ── PLOT 2.1: Pareto Scatter F1 vs DI ────────────────────────────────
     print('Plot 2.1 – Pareto scatter')
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.axvspan(0.8, 1.25, alpha=0.08, color='green', label='Zona de Fairness (80% rule)')
+    ax.axvspan(0.8, 1.25, alpha=0.08, color='green', label='Fairness Zone (80% rule)')
     ax.axvline(1.0, color='green', linestyle='--', lw=1.2, alpha=0.6)
     ax.axvline(0.8, color='red', linestyle='--', lw=1, alpha=0.5)
     ax.axvline(1.25, color='red', linestyle='--', lw=1, alpha=0.5)
@@ -132,9 +137,8 @@ def run_for_dataset(dataset_name: str) -> None:
                        marker=MODEL_MARKERS.get(model, 'o'),
                        s=70, alpha=0.8, edgecolors='white', linewidths=0.5)
     ax.legend(handles=legend_sc + legend_mod, loc='upper right', fontsize=8, ncol=2)
-    ax.set_xlabel('Disparate Impact (DI) →  Fairness', fontsize=11)
-    ax.set_ylabel('F1-Score →  Utilidade', fontsize=11)
-    ax.set_title(f'Trade-off Fairness × Utilidade — {dataset_name.upper()}', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Disparate Impact (DI) → Fairness', fontsize=11)
+    ax.set_ylabel('F1-Score → Utility', fontsize=11)
     di_min = max(0.0, means_full['disparate_impact'].min() - 0.1)
     di_max = means_full['disparate_impact'].max() + 0.15
     ax.set_xlim(di_min, di_max)
@@ -143,7 +147,7 @@ def run_for_dataset(dataset_name: str) -> None:
     # ── PLOT 2.2: F1 vs SPD ───────────────────────────────────────────────
     print('Plot 2.2 – Scatter F1 vs SPD')
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='SPD ideal=0')
+    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='Ideal SPD=0')
     ax.axvspan(-0.1, 0.1, alpha=0.08, color='green')
     for sg, grp in means_full.groupby('sg'):
         for model, mgrp in grp.groupby('model'):
@@ -156,13 +160,12 @@ def run_for_dataset(dataset_name: str) -> None:
         loc='upper right', fontsize=8, ncol=2)
     ax.set_xlabel('Statistical Parity Difference (SPD)', fontsize=11)
     ax.set_ylabel('F1-Score', fontsize=11)
-    ax.set_title(f'Trade-off F1 × SPD — {dataset_name.upper()}', fontsize=13, fontweight='bold')
     save(fig, 'plot2_2_scatter_f1_spd.png')
 
     # ── PLOT 2.3: F1 vs EOD ───────────────────────────────────────────────
     print('Plot 2.3 – Scatter F1 vs EOD')
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='EOD ideal=0')
+    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='Ideal EOD=0')
     ax.axvspan(-0.1, 0.1, alpha=0.08, color='green')
     for sg, grp in means_full.groupby('sg'):
         for model, mgrp in grp.groupby('model'):
@@ -175,13 +178,12 @@ def run_for_dataset(dataset_name: str) -> None:
         loc='upper right', fontsize=8, ncol=2)
     ax.set_xlabel('Equal Opportunity Difference (EOD)', fontsize=11)
     ax.set_ylabel('F1-Score', fontsize=11)
-    ax.set_title(f'Trade-off F1 × EOD — {dataset_name.upper()}', fontsize=13, fontweight='bold')
     save(fig, 'plot2_3_scatter_f1_eod.png')
 
     # ── PLOT 2.4: F1 vs AOD ───────────────────────────────────────────────
     print('Plot 2.4 – Scatter F1 vs AOD')
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='AOD ideal=0')
+    ax.axvline(0.0, color='green', linestyle='--', lw=1.5, alpha=0.7, label='Ideal AOD=0')
     ax.axvspan(-0.1, 0.1, alpha=0.08, color='green')
     for sg, grp in means_full.groupby('sg'):
         for model, mgrp in grp.groupby('model'):
@@ -194,7 +196,6 @@ def run_for_dataset(dataset_name: str) -> None:
         loc='upper right', fontsize=8, ncol=2)
     ax.set_xlabel('Average Absolute Odds Difference (AOD)', fontsize=11)
     ax.set_ylabel('F1-Score', fontsize=11)
-    ax.set_title(f'Trade-off F1 × AOD — {dataset_name.upper()}', fontsize=13, fontweight='bold')
     save(fig, 'plot2_4_scatter_f1_aod.png')
 
     # ── PLOT 3.1: Violin SPD ──────────────────────────────────────────────
@@ -211,10 +212,9 @@ def run_for_dataset(dataset_name: str) -> None:
     fig, ax = plt.subplots(figsize=(13, 5))
     sns.violinplot(data=df, x='scenario_label', y='statistical_parity_difference',
                    order=present, palette=pal, inner='box', ax=ax, cut=0)
-    ax.axhline(0, color='green', linestyle='--', lw=1.5, label='SPD ideal = 0')
+    ax.axhline(0, color='green', linestyle='--', lw=1.5, label='Ideal SPD = 0')
     ax.set_xlabel('')
     ax.set_ylabel('Statistical Parity Difference (SPD)', fontsize=11)
-    ax.set_title(f'SPD Distribution by Scenario — {dataset_name.upper()}', fontsize=13, fontweight='bold')
     ax.legend(fontsize=9)
     save(fig, 'plot3_1_violin_spd_by_scenario.png')
 
@@ -239,14 +239,12 @@ def run_for_dataset(dataset_name: str) -> None:
                               gdf['di_mean']-gdf['di_std'],
                               gdf['di_mean']+gdf['di_std'], alpha=0.15, color=c)
     axes[1].axhline(s1_di, color='#e63946', linestyle='--', lw=1.5, label=f'S1 DI={s1_di:.2f}')
-    axes[1].axhline(1.0, color='green', linestyle=':', lw=1.5, label='DI ideal=1')
+    axes[1].axhline(1.0, color='green', linestyle=':', lw=1.5, label='Ideal DI=1')
     for ax, ylabel in [(axes[0],'F1-Score'),(axes[1],'Disparate Impact')]:
         ax.set_xlabel('Augmentation Ratio (α)', fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
         ax.set_xticks([1.5,2.0,3.0])
         ax.legend(fontsize=8)
-    axes[0].set_title(f'F1 vs Augmentation Ratio (S3) — {dataset_name.upper()}', fontweight='bold')
-    axes[1].set_title(f'DI vs Augmentation Ratio (S3) — {dataset_name.upper()}', fontweight='bold')
     save(fig, 'plot4_1_augmentation_ratio.png')
 
     # ── PLOT 6.1: Wilcoxon heatmap ────────────────────────────────────────
@@ -310,11 +308,6 @@ def run_for_dataset(dataset_name: str) -> None:
             piv, annot=True, fmt='.3f', cmap='RdYlGn_r',
             vmin=0, vmax=0.1, ax=ax, linewidths=0.4,
             annot_kws={'size': 7}, cbar_kws={'label': 'p-value'},
-        )
-        ax.set_title(
-            f'Wilcoxon p-values – {metric_label} — {dataset_name.upper()}\n'
-            f'(green = p<0.05 = significant)',
-            fontweight='bold', fontsize=11,
         )
         ax.set_xlabel('Generator | Model', fontsize=10)
         ax.set_ylabel('Scenario Comparison', fontsize=10)

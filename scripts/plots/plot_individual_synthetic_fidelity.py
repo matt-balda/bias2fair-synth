@@ -38,6 +38,7 @@ def save(fig, *parts, tight=True):
     if tight:
         fig.tight_layout()
     fig.savefig(path, bbox_inches='tight')
+    fig.savefig(path.replace('.png', '.eps'), format='eps', bbox_inches='tight')
     plt.close(fig)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -74,7 +75,6 @@ def plot_distributions(real_df, base):
                             fill=True, alpha=0.35, color='steelblue')
                 sns.kdeplot(synth[col].dropna(), ax=ax, label='Synthetic',
                             fill=True, alpha=0.35, color='tomato', linestyle='--')
-                ax.set_title(f'{col} — Real vs Synthetic ({generator})')
                 ax.legend()
                 save(fig, out, f'{col}_kde.png')
 
@@ -85,10 +85,8 @@ def plot_distributions(real_df, base):
                 fig, axes = plt.subplots(1, 2, figsize=(10, 4))
                 real_df[col].value_counts(normalize=True).plot(
                     kind='bar', ax=axes[0], color='steelblue', rot=30)
-                axes[0].set_title(f'Real — {col}')
                 synth[col].value_counts(normalize=True).plot(
                     kind='bar', ax=axes[1], color='tomato', rot=30)
-                axes[1].set_title(f'Synthetic — {col}')
                 save(fig, out, f'{col}_bar.png')
 
 
@@ -126,7 +124,6 @@ def plot_correlations(real_df, base):
                 fig, ax = plt.subplots(figsize=(8, 7))
                 sns.heatmap(corr, annot=True, fmt='.2f', cmap='coolwarm',
                             center=0, ax=ax, annot_kws={'size': 6})
-                ax.set_title(f'{title} ({generator} / {scenario})')
                 save(fig, out, fname)
 
 
