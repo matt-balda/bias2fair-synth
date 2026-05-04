@@ -51,7 +51,7 @@ def generate_table(dataset_name):
     df_filtered = df[df['Scenario_Group'].notnull()]
 
     # Group by Scenario_Group and calculate mean and std
-    metrics = ['f1', 'statistical_parity_difference', 'disparate_impact']
+    metrics = ['f1', 'disparate_impact', 'average_absolute_odds_difference', 'equal_opportunity_difference']
     
     grouped = df_filtered.groupby('Scenario_Group')[metrics].agg(['mean', 'std'])
     
@@ -83,17 +83,86 @@ def generate_table(dataset_name):
     print(f"{'='*50}")
 
     # Format the table nicely
-    print(f"{'Scenario':<20} | {'F1-Score':<18} | {'SPD':<18} | {'DI':<18} | {'Delta DI':<18}")
-    print("-" * 100)
+    print(f"{'Scenario':<20} | {'F1-Score':<18} | {'DI':<18} | {'Delta DI':<18} | {'AOD':<18} | {'EOD':<18}")
+    print("-" * 110)
     
     for idx, row in grouped.iterrows():
         f1_str = f"{row[('f1', 'mean')]:.4f} ± {row[('f1', 'std')]:.4f}"
-        spd_str = f"{row[('statistical_parity_difference', 'mean')]:.4f} ± {row[('statistical_parity_difference', 'std')]:.4f}"
         di_str = f"{row[('disparate_impact', 'mean')]:.4f} ± {row[('disparate_impact', 'std')]:.4f}"
         delta_di_str = f"{row[('delta_DI', 'mean')]:.4f} ± {row[('delta_DI', 'std')]:.4f}"
+        aod_str = f"{row[('average_absolute_odds_difference', 'mean')]:.4f} ± {row[('average_absolute_odds_difference', 'std')]:.4f}"
+        eod_str = f"{row[('equal_opportunity_difference', 'mean')]:.4f} ± {row[('equal_opportunity_difference', 'std')]:.4f}"
         
-        print(f"{idx:<20} | {f1_str:<18} | {spd_str:<18} | {di_str:<18} | {delta_di_str:<18}")
+        print(f"{idx:<20} | {f1_str:<18} | {di_str:<18} | {delta_di_str:<18} | {aod_str:<18} | {eod_str:<18}")
+
+    return grouped
+
+
+def fmt(mean, std):
+    """Format a mean ± std cell for LaTeX."""
+    return f"${mean:.4f} \\pm {std:.4f}$"
+
+
+def export_latex(dataset_name, grouped):
+    """Export the summary table as a LaTeX booktabs table."""
+    import os
+    os.makedirs('outputs/tables', exist_ok=True)
+
+    label = dataset_name.upper()
+    out_path = f'outputs/tables/{dataset_name}_summary.tex'
+
+    lines = []
+    lines.append(r'\begin{table}[htbp]')
+    lines.append(r'  \centering')
+    lines.append(r'  \caption{Results for ' + label + r' dataset (mean $\pm$ std across seeds).}')
+    lines.append(r'  \label{tab:results_' + dataset_name + r'}')
+    lines.append(r'  \resizebox{\textwidth}{!}{')
+    lines.append(r'  \begin{tabular}{lcccccc}')
+    lines.append(r'    \toprule')
+    lines.append(r'    \textbf{Scenario} & \textbf{F1-Score} & \textbf{DI} & \textbf{$\Delta$DI} & \textbf{AOD} & \textbf{EOD} \\')
+    lines.append(r'    \midrule')
+
+    # Group separators
+    group_prefixes = {
+        'S1': None,
+        'S2': 'S1',
+        'S3': 'S2',
+        'S4': 'S3',
+        'S5': 'S4',
+        'S6': 'S5',
+    }
+    last_prefix = None
+
+    for idx, row in grouped.iterrows():
+        prefix = idx.split(' ')[0]  # e.g., 'S1', 'S2', ...
+        if last_prefix is not None and prefix != last_prefix:
+            lines.append(r'    \midrule')
+        last_prefix = prefix
+
+        # Escape special LaTeX chars in scenario name
+        scenario_escaped = idx.replace('&', r'\&').replace('_', r'\_').replace('#', r'\#')
+
+        f1   = fmt(row[('f1', 'mean')],                                     row[('f1', 'std')])
+        di   = fmt(row[('disparate_impact', 'mean')],                        row[('disparate_impact', 'std')])
+        ddi  = fmt(row[('delta_DI', 'mean')],                                row[('delta_DI', 'std')])
+        aod  = fmt(row[('average_absolute_odds_difference', 'mean')],        row[('average_absolute_odds_difference', 'std')])
+        eod  = fmt(row[('equal_opportunity_difference', 'mean')],            row[('equal_opportunity_difference', 'std')])
+
+        lines.append(f'    {scenario_escaped} & {f1} & {di} & {ddi} & {aod} & {eod} \\\\')
+
+    lines.append(r'    \bottomrule')
+    lines.append(r'  \end{tabular}')
+    lines.append(r'  }')
+    lines.append(r'\end{table}')
+
+    tex = '\n'.join(lines) + '\n'
+    with open(out_path, 'w') as f:
+        f.write(tex)
+    print(f"LaTeX table saved to {out_path}")
+
 
 if __name__ == '__main__':
     for ds in ['compas', 'adult', 'diabetes']:
-        generate_table(ds)
+        grouped = generate_table(ds)
+        if grouped is not None:
+            export_latex(ds, grouped)
