@@ -1,4 +1,4 @@
-# From Bias to Fair: Can Synthetic Data Bridge the Gap?
+# Bias2Fair Synth
 
 Evaluation of the impact of synthetic data on algorithmic bias mitigation in machine learning models [CatBoost, Logistic Regression, SVM], focusing on datasets [COMPAS, Adult, Diabetes 130-US Hospitals for Years 1999-2008] and generators [CTGAN, Gaussian Copula, TVAE, TabDDM].
 
